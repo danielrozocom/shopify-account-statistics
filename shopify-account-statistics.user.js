@@ -321,12 +321,23 @@
                     priceHistoryHtml = `<span style="font-size: 11px; color: #70647a;">-</span>`;
                 }
 
+                let variantBadgeHtml = '';
+                if (p.variants && Object.keys(p.variants).length > 0) {
+                    const variantSummary = Object.entries(p.variants)
+                        .map(([vName, vQty]) => `${vName} (${vQty} und.)`)
+                        .join(' · ');
+                    variantBadgeHtml = `<span style="font-size: 10px; color: #6b21a8; background: #f3e8ff; border: 1px solid #e9d5ff; padding: 1px 6px; border-radius: 4px; font-weight: 500; margin-top: 3px; display: inline-block;" title="Variantes compradas: ${variantSummary}">🎨 ${variantSummary}</span>`;
+                }
+
                 top10RowsHtml += `
                     <tr style="border-bottom: 1px solid #f0ecf4;">
                         <td style="padding: 10px 12px; font-weight: 700; color: #9333ea; font-size: 13px;">#${idx + 1}</td>
                         <td style="padding: 10px 12px; display: flex; align-items: center; gap: 10px;">
                             ${imgHtml}
-                            ${titleHtml}
+                            <div>
+                                ${titleHtml}
+                                ${variantBadgeHtml ? `<br>${variantBadgeHtml}` : ''}
+                            </div>
                         </td>
                         <td style="padding: 10px 12px; text-align: center; font-weight: 700; color: #16081e; font-size: 13px;">${p.quantity} und.</td>
                         <td style="padding: 10px 12px; text-align: center;">${priceHistoryHtml}</td>
@@ -1009,9 +1020,19 @@
                 const imgUrl = item.image?.url || null;
                 const prodUrl = item.onlineStoreUrl || item.url || item.product?.onlineStoreUrl || (item.product?.handle ? `/products/${item.product.handle}` : null) || (item.variant?.product?.handle ? `/products/${item.variant.product.handle}` : null) || null;
 
+                let vTitle = item.variantTitle || item.variant_title || item.variant?.title;
+                if (!vTitle && Array.isArray(item.variantOptions) && item.variantOptions.length > 0) {
+                    vTitle = item.variantOptions.map(o => typeof o === 'object' ? (o.value || o.name) : o).filter(Boolean).join(' / ');
+                }
+                if (!vTitle && Array.isArray(item.variant_options) && item.variant_options.length > 0) {
+                    vTitle = item.variant_options.map(o => typeof o === 'object' ? (o.value || o.name) : o).filter(Boolean).join(' / ');
+                }
+                const cleanVariant = (vTitle && typeof vTitle === 'string' && vTitle.toLowerCase() !== 'default title') ? vTitle.trim() : null;
+
                 if (title && typeof title === 'string') {
                     items.push({
                         title: title.trim(),
+                        variantTitle: cleanVariant,
                         quantity: !isNaN(quantity) ? quantity : 1,
                         price: !isNaN(parseFloat(price)) ? parseFloat(price) : 0,
                         imageUrl: imgUrl,
@@ -1040,7 +1061,8 @@
                             totalSpent: 0,
                             imageUrl: it.imageUrl,
                             url: it.url,
-                            prices: []
+                            prices: [],
+                            variants: {}
                         };
                     }
                     map[it.title].quantity += it.quantity;
@@ -1050,6 +1072,13 @@
                     }
                     if (it.url && !map[it.title].url) {
                         map[it.title].url = it.url;
+                    }
+
+                    if (it.variantTitle) {
+                        if (!map[it.title].variants[it.variantTitle]) {
+                            map[it.title].variants[it.variantTitle] = 0;
+                        }
+                        map[it.title].variants[it.variantTitle] += it.quantity;
                     }
 
                     const unitPrice = it.quantity > 0 ? (it.price / it.quantity) : it.price;
@@ -1255,6 +1284,8 @@
               discountInformation { title discountValue { amount currencyCode } }
               image { url altText }
               title
+              variantTitle
+              variantOptions { name value }
               quantity
               onlineStoreUrl
             }
@@ -1279,6 +1310,8 @@
               presentmentName
               title
               presentmentTitle
+              variantTitle
+              variantOptions { name value }
               quantity
               onlineStoreUrl
               currentTotalPrice: totalPriceWithDiscounts { amount currencyCode }
