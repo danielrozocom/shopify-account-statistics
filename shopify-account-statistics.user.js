@@ -629,6 +629,47 @@
     let pendingSyncTotal = 0;
     let pendingSyncCurrent = 0;
 
+    const ORDER_DETAILS_QUERY = `query OrderDetailsByID($id: ID!) {
+  order(id: $id) {
+    id
+    name
+    processedAt
+    totalPrice { amount currencyCode }
+    totalSavings { amount currencyCode }
+    totalPriceBeforeDiscounts { amount currencyCode }
+    discountApplications {
+      ... on AutomaticDiscountApplication { title }
+      ... on DiscountCodeApplication { code }
+      ... on ManualDiscountApplication { title }
+    }
+    discountInformation {
+      title
+      discountValue { amount currencyCode }
+    }
+    lineItemContainers {
+      ... on RemainingLineItemContainer {
+        lineItems(first: 250) {
+          nodes {
+            lineItem {
+              totalPriceBeforeDiscounts { amount currencyCode }
+              totalPriceWithDiscounts { amount currencyCode }
+              discountAllocations {
+                allocatedAmount { amount currencyCode }
+                discountApplication {
+                  ... on AutomaticDiscountApplication { title }
+                  ... on DiscountCodeApplication { code }
+                  ... on ManualDiscountApplication { title }
+                }
+              }
+              discountInformation { title discountValue { amount currencyCode } }
+            }
+          }
+        }
+      }
+    }
+  }
+}`;
+
     async function syncMissingOrderDetails() {
         if (isSyncingDetails) return;
         const ordersMap = getStoredOrders();
@@ -654,7 +695,7 @@
 
         const targetWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
         const basePath = window.location.pathname.split('/account')[0];
-        const graphqlUrl = window.location.origin + basePath + '/account/customer/api/unstable/graphql?operation=LineItems';
+        const graphqlUrl = window.location.origin + basePath + '/account/customer/api/unstable/graphql';
 
         for (let i = 0; i < pendingList.length; i++) {
             pendingSyncCurrent = i + 1;
@@ -663,17 +704,10 @@
                 const resp = await targetWindow.fetch(graphqlUrl, {
                     method: 'POST',
                     credentials: 'include',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                     body: JSON.stringify({
-                        operationName: "LineItems",
-                        variables: {
-                            redacted: false,
-                            skipCompareAtPricing: true,
-                            skipOnlineStoreUrl: false,
-                            orderId: item.gid,
-                            lineItemsFirst: 250
-                        },
-                        query: EXACT_LINE_ITEMS_QUERY
+                        query: ORDER_DETAILS_QUERY,
+                        variables: { id: item.gid }
                     })
                 });
 
@@ -693,11 +727,15 @@
                         currentOrders[item.name].detailFetched = true;
                         saveStoredOrders(currentOrders);
                     }
+                } else {
+                    console.error('[Shopify Analytics] Error en consulta de descuento para', item.gid, resp.status);
                 }
-            } catch (e) { }
+            } catch (e) {
+                console.error('[Shopify Analytics] Excepción en syncMissingOrderDetails:', e);
+            }
 
             updateDashboard();
-            await new Promise(r => setTimeout(r, 150));
+            await new Promise(r => setTimeout(r, 120));
         }
 
         isSyncingDetails = false;
