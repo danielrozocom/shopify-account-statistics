@@ -92,6 +92,7 @@
 
         isAutoLoadingAll = false;
         updateDashboard();
+        syncMissingOrderDetails();
     }
 
     async function scrollToOrder(position) {
@@ -651,6 +652,7 @@
                         if (extractOrdersFromObj(res, uniqueOrders)) {
                             saveStoredOrders(uniqueOrders);
                             updateDashboard();
+                            syncMissingOrderDetails();
                         }
                     }).catch(() => { });
                 }
