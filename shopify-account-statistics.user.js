@@ -3,15 +3,18 @@
 // @namespace    http://tampermonkey.net/
 // @version      4.9
 // @description  Muestra todas las estadísticas y fechas exactas en las tarjetas de pedidos sin ningún filtro previo.
-// @author       Dani
+// @author       Daniel Josue Rozo Vargas
 // @match        https://shopify.com/*/account/orders*
 // @grant        none
 // ==/UserScript==
 
-(function() {
+(function () {
     'use strict';
 
     const STORAGE_KEY = 'shopify_orders_database_v4.9';
+    let currentFilterMode = 'all'; // 'all', 'month', 'year', 'custom'
+    let customStartDate = '';
+    let customEndDate = '';
 
     function formatCurrency(amount) {
         return new Intl.NumberFormat('es-CO', {
@@ -53,6 +56,20 @@
         return 'rgb(192, 159, 219)';
     }
 
+    function scrollToOrder(position) {
+        const articles = document.querySelectorAll('article');
+        if (articles.length > 0) {
+            const target = position === 'first' ? articles[0] : articles[articles.length - 1];
+            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else {
+            if (position === 'first') {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            } else {
+                window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+            }
+        }
+    }
+
     function renderPanel(count, total, avg, statusText, isLoading = false) {
         const headerContainer = document.querySelector('._17kya4u18._1fragem120._1fragem5u._1fragemws') || document.querySelector('h1');
         if (!headerContainer) return false;
@@ -73,10 +90,8 @@
                 font-family: 'Poppins', sans-serif;
                 color: #16081e;
                 display: flex;
-                flex-wrap: wrap;
-                gap: 20px;
-                align-items: center;
-                justify-content: space-between;
+                flex-direction: column;
+                gap: 16px;
                 box-shadow: 0 4px 12px rgba(0,0,0,0.08);
                 width: 100%;
                 box-sizing: border-box;
@@ -107,63 +122,150 @@
             `;
         } else {
             panel.innerHTML = `
-                <div style="display: flex; gap: 30px; flex-wrap: wrap; align-items: center; width: 100%;">
-                    <div style="flex: 1; min-width: 130px;">
-                        <span style="font-size: 11px; color: #70647a; display: block; font-weight: 500; text-transform: uppercase;">Órdenes Totales</span>
-                        <span style="font-size: 18px; font-weight: 700; color: #16081e;">${count}</span>
+                <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; justify-content: space-between; width: 100%;">
+                    <div style="display: flex; gap: 24px; flex-wrap: wrap; align-items: center; flex: 1;">
+                        <div style="min-width: 120px;">
+                            <span style="font-size: 11px; color: #70647a; display: block; font-weight: 500; text-transform: uppercase;">Órdenes Totales</span>
+                            <span style="font-size: 18px; font-weight: 700; color: #16081e;">${count}</span>
+                        </div>
+                        <div style="min-width: 150px;">
+                            <span style="font-size: 11px; color: #70647a; display: block; font-weight: 500; text-transform: uppercase;">Total Gastado</span>
+                            <span style="font-size: 18px; font-weight: 700; color: #16081e;">${total}</span>
+                        </div>
+                        <div style="min-width: 150px;">
+                            <span style="font-size: 11px; color: #70647a; display: block; font-weight: 500; text-transform: uppercase;">Promedio por Orden</span>
+                            <span style="font-size: 18px; font-weight: 700; color: #16081e;">${avg}</span>
+                        </div>
                     </div>
-                    <div style="flex: 1; min-width: 160px;">
-                        <span style="font-size: 11px; color: #70647a; display: block; font-weight: 500; text-transform: uppercase;">Total Gastado</span>
-                        <span style="font-size: 18px; font-weight: 700; color: #16081e;">${total}</span>
-                    </div>
-                    <div style="flex: 1; min-width: 160px;">
-                        <span style="font-size: 11px; color: #70647a; display: block; font-weight: 500; text-transform: uppercase;">Promedio por Orden</span>
-                        <span style="font-size: 18px; font-weight: 700; color: #16081e;">${avg}</span>
-                    </div>
-                    <div>
+                    
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                         <span style="font-size: 10px; background: ${themeColor}; color: #fff; padding: 4px 8px; border-radius: 6px; font-weight: 600;">${statusText}</span>
                     </div>
                 </div>
+
+                <!-- Controles de Filtros de Fecha y Navegación Rápida -->
+                <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center; justify-content: space-between; border-top: 1px solid #f0ecf4; padding-top: 12px;">
+                    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                        <span style="font-size: 12px; font-weight: 600; color: #4a3e56;">📅 Filtrar por fecha:</span>
+                        <select id="shopify-filter-mode-select" style="padding: 6px 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 12px; font-family: inherit; background: #fff; cursor: pointer;">
+                            <option value="all" ${currentFilterMode === 'all' ? 'selected' : ''}>Todas las fechas</option>
+                            <option value="month" ${currentFilterMode === 'month' ? 'selected' : ''}>Este mes</option>
+                            <option value="year" ${currentFilterMode === 'year' ? 'selected' : ''}>Este año</option>
+                            <option value="custom" ${currentFilterMode === 'custom' ? 'selected' : ''}>Rango personalizado</option>
+                        </select>
+
+                        <div id="shopify-custom-date-container" style="display: ${currentFilterMode === 'custom' ? 'inline-flex' : 'none'}; gap: 6px; align-items: center;">
+                            <input type="date" id="shopify-date-start" value="${customStartDate}" style="padding: 4px 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 11px;">
+                            <span style="font-size: 11px; color: #666;">a</span>
+                            <input type="date" id="shopify-date-end" value="${customEndDate}" style="padding: 4px 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 11px;">
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <button id="shopify-btn-first-order-panel" style="padding: 6px 12px; border-radius: 20px; border: 1px solid ${themeColor}; background: #f8f5fb; color: #16081e; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                            ⬆️ Primer pedido
+                        </button>
+                        <button id="shopify-btn-last-order-panel" style="padding: 6px 12px; border-radius: 20px; border: 1px solid ${themeColor}; background: #f8f5fb; color: #16081e; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                            ⬇️ Último pedido
+                        </button>
+                    </div>
+                </div>
             `;
+
+            // Event Listeners para Filtros
+            const selectEl = document.getElementById('shopify-filter-mode-select');
+            if (selectEl) {
+                selectEl.onchange = (e) => {
+                    currentFilterMode = e.target.value;
+                    const dateContainer = document.getElementById('shopify-custom-date-container');
+                    if (dateContainer) {
+                        dateContainer.style.display = currentFilterMode === 'custom' ? 'inline-flex' : 'none';
+                    }
+                    updateDashboard();
+                };
+            }
+
+            const startEl = document.getElementById('shopify-date-start');
+            if (startEl) {
+                startEl.onchange = (e) => {
+                    customStartDate = e.target.value;
+                    updateDashboard();
+                };
+            }
+
+            const endEl = document.getElementById('shopify-date-end');
+            if (endEl) {
+                endEl.onchange = (e) => {
+                    customEndDate = e.target.value;
+                    updateDashboard();
+                };
+            }
+
+            // Event Listeners para botones del Panel
+            const btnFirst = document.getElementById('shopify-btn-first-order-panel');
+            if (btnFirst) btnFirst.onclick = () => scrollToOrder('first');
+
+            const btnLast = document.getElementById('shopify-btn-last-order-panel');
+            if (btnLast) btnLast.onclick = () => scrollToOrder('last');
         }
         return true;
     }
 
-    function renderScrollTopButton() {
-        if (document.getElementById('shopify-scroll-top-btn')) return;
+    function renderNavFloatingButtons() {
+        if (document.getElementById('shopify-nav-floating-container')) return;
 
         const themeColor = getShopifyBrandColor();
-        const btn = document.createElement('button');
-        btn.id = 'shopify-scroll-top-btn';
-        btn.innerHTML = '⬆️ Ir al primer pedido';
-        btn.style.cssText = `
+        const container = document.createElement('div');
+        container.id = 'shopify-nav-floating-container';
+        container.style.cssText = `
             position: fixed;
             bottom: 25px;
             right: 25px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 99999;
+        `;
+
+        const btnTop = document.createElement('button');
+        btnTop.id = 'shopify-scroll-top-btn';
+        btnTop.innerHTML = '⬆️ Primer pedido';
+        btnTop.style.cssText = `
             background: #ffffff;
             color: #16081e;
             border: 2px solid ${themeColor};
-            padding: 10px 16px;
+            padding: 8px 14px;
             border-radius: 30px;
             font-family: 'Poppins', sans-serif;
             font-weight: 600;
-            font-size: 13px;
+            font-size: 12px;
             cursor: pointer;
             box-shadow: 0 4px 14px rgba(0,0,0,0.15);
-            z-index: 99999;
-            transition: all 0.2s ease;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
         `;
+        btnTop.onclick = () => scrollToOrder('first');
 
-        btn.onclick = () => {
-            const firstOrder = document.querySelector('article') || document.querySelector('h1');
-            if (firstOrder) {
-                firstOrder.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            } else {
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-            }
-        };
+        const btnBottom = document.createElement('button');
+        btnBottom.id = 'shopify-scroll-bottom-btn';
+        btnBottom.innerHTML = '⬇️ Último pedido';
+        btnBottom.style.cssText = `
+            background: #ffffff;
+            color: #16081e;
+            border: 2px solid ${themeColor};
+            padding: 8px 14px;
+            border-radius: 30px;
+            font-family: 'Poppins', sans-serif;
+            font-weight: 600;
+            font-size: 12px;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        `;
+        btnBottom.onclick = () => scrollToOrder('last');
 
-        document.body.appendChild(btn);
+        container.appendChild(btnTop);
+        container.appendChild(btnBottom);
+        document.body.appendChild(container);
     }
 
     function getStoredOrders() {
@@ -178,46 +280,64 @@
     function saveStoredOrders(ordersMap) {
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(ordersMap));
-        } catch (e) {}
+        } catch (e) { }
+    }
+
+    function extractOrdersFromObj(obj, uniqueOrders) {
+        if (!obj || typeof obj !== 'object') return false;
+        let updated = false;
+
+        if (Array.isArray(obj)) {
+            obj.forEach(item => {
+                if (extractOrdersFromObj(item, uniqueOrders)) updated = true;
+            });
+        } else {
+            const name = obj.name || obj.orderNumber || obj.id;
+            const amount = obj.totalPrice?.amount || obj.currentTotalPrice?.amount || obj.totalPrice || obj.total;
+            const date = obj.processedAt || obj.createdAt || obj.processed_at || obj.created_at;
+
+            if (name && typeof name === 'string' && (name.startsWith('#') || name.startsWith('CJ')) && amount !== undefined) {
+                const priceNum = parseFloat(amount);
+                if (!isNaN(priceNum)) {
+                    const formattedName = name.startsWith('#') ? name : `#${name}`;
+                    if (!uniqueOrders[formattedName] || (!uniqueOrders[formattedName].date && date)) {
+                        uniqueOrders[formattedName] = {
+                            price: priceNum,
+                            date: date || uniqueOrders[formattedName]?.date || null
+                        };
+                        updated = true;
+                    }
+                }
+            }
+
+            for (const key in obj) {
+                if (obj[key] && typeof obj[key] === 'object') {
+                    if (extractOrdersFromObj(obj[key], uniqueOrders)) updated = true;
+                }
+            }
+        }
+        return updated;
     }
 
     function setupFetchInterceptor() {
         const targetWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
         const originalFetch = targetWindow.fetch;
 
-        targetWindow.fetch = async function(...args) {
+        targetWindow.fetch = async function (...args) {
             const response = await originalFetch.apply(this, args);
             try {
-                const url = args[0];
-                if (typeof url === 'string' && url.includes('graphql') && url.includes('Orders')) {
+                let requestUrl = (typeof args[0] === 'string') ? args[0] : (args[0]?.url || '');
+                if (requestUrl.includes('graphql') || requestUrl.includes('/account') || requestUrl.includes('/api')) {
                     const clone = response.clone();
                     clone.json().then(res => {
-                        const nodes = res?.data?.customer?.orders?.nodes;
-                        if (nodes && Array.isArray(nodes)) {
-                            let uniqueOrders = getStoredOrders();
-                            let updated = false;
-
-                            nodes.forEach(order => {
-                                const id = order.name; 
-                                const amount = parseFloat(order.totalPrice?.amount);
-                                const processedAt = order.processedAt;
-
-                                if (id && !isNaN(amount)) {
-                                    if (!uniqueOrders[id] || !uniqueOrders[id].date) {
-                                        uniqueOrders[id] = { price: amount, date: processedAt };
-                                        updated = true;
-                                    }
-                                }
-                            });
-
-                            if (updated) {
-                                saveStoredOrders(uniqueOrders);
-                                updateDashboard();
-                            }
+                        let uniqueOrders = getStoredOrders();
+                        if (extractOrdersFromObj(res, uniqueOrders)) {
+                            saveStoredOrders(uniqueOrders);
+                            updateDashboard();
                         }
-                    }).catch(() => {});
+                    }).catch(() => { });
                 }
-            } catch (err) {}
+            } catch (err) { }
             return response;
         };
     }
@@ -227,10 +347,10 @@
         const articles = document.querySelectorAll('article');
 
         articles.forEach(article => {
-            const heading = article.querySelector('h2');
+            const heading = article.querySelector('h2, h3, header, strong');
             if (heading) {
                 const orderIdText = heading.textContent.trim();
-                
+
                 if (ordersMap[orderIdText] && ordersMap[orderIdText].date) {
                     let existingBadge = article.querySelector('.shopify-order-date-badge');
                     const formattedDate = formatOrderDate(ordersMap[orderIdText].date);
@@ -264,11 +384,18 @@
         let uniqueOrders = getStoredOrders();
         let newFound = false;
 
-        const items = document.querySelectorAll('article, li');
-        items.forEach(item => {
-            const textContent = item.textContent || "";
-            const orderMatch = textContent.match(/(#CJ\d+)/);
-            const priceMatch = textContent.match(/\$\s*([\d\.,]+)\s*COP/);
+        const articles = document.querySelectorAll('article');
+        articles.forEach(article => {
+            const textContent = article.textContent || "";
+            const orderMatch = textContent.match(/(#[A-Za-z0-9\-_]+)/);
+            const priceMatch = textContent.match(/\$\s*([\d\.,]+)\s*COP/) || textContent.match(/([\d\.,]+)\s*COP/);
+
+            // Intentar obtener la fecha del DOM (<time datetime="..."> o texto de fecha)
+            const timeEl = article.querySelector('time');
+            let extractedDate = null;
+            if (timeEl) {
+                extractedDate = timeEl.getAttribute('datetime') || timeEl.textContent;
+            }
 
             if (orderMatch && priceMatch) {
                 const orderId = orderMatch[1];
@@ -277,7 +404,10 @@
 
                 if (!isNaN(price)) {
                     if (!uniqueOrders[orderId]) {
-                        uniqueOrders[orderId] = { price: price, date: null };
+                        uniqueOrders[orderId] = { price: price, date: extractedDate };
+                        newFound = true;
+                    } else if (!uniqueOrders[orderId].date && extractedDate) {
+                        uniqueOrders[orderId].date = extractedDate;
                         newFound = true;
                     }
                 }
@@ -291,22 +421,62 @@
         return uniqueOrders;
     }
 
+    function filterOrdersByDate(ordersMap) {
+        const orderIds = Object.keys(ordersMap);
+        const now = new Date();
+
+        return orderIds.filter(id => {
+            const order = ordersMap[id];
+            if (currentFilterMode === 'all') return true;
+            if (!order) return false;
+
+            if (!order.date) {
+                // Si la fecha aún no se ha obtenido, se incluye por defecto
+                return true;
+            }
+
+            const orderDate = new Date(order.date);
+            if (isNaN(orderDate.getTime())) return true;
+
+            if (currentFilterMode === 'month') {
+                return orderDate.getMonth() === now.getMonth() && orderDate.getFullYear() === now.getFullYear();
+            }
+            if (currentFilterMode === 'year') {
+                return orderDate.getFullYear() === now.getFullYear();
+            }
+            if (currentFilterMode === 'custom') {
+                if (customStartDate) {
+                    const start = new Date(customStartDate + 'T00:00:00');
+                    if (orderDate < start) return false;
+                }
+                if (customEndDate) {
+                    const end = new Date(customEndDate + 'T23:59:59');
+                    if (orderDate > end) return false;
+                }
+                return true;
+            }
+            return true;
+        });
+    }
+
     function updateDashboard() {
         scanDOMOrders();
         const ordersMap = getStoredOrders();
-        const orderIds = Object.keys(ordersMap);
-        const orderCount = orderIds.length;
+        const filteredIds = filterOrdersByDate(ordersMap);
+        const orderCount = filteredIds.length;
 
         let totalSpent = 0;
-        orderIds.forEach(id => {
+        filteredIds.forEach(id => {
             const orderData = ordersMap[id];
             const price = typeof orderData === 'object' ? orderData.price : orderData;
             totalSpent += price;
         });
 
         const average = orderCount > 0 ? totalSpent / orderCount : 0;
+        const totalAllOrders = Object.keys(ordersMap).length;
+        const statusLabel = currentFilterMode !== 'all' ? `Filtrando (${orderCount} de ${totalAllOrders})` : 'Sincronizado';
 
-        renderPanel(orderCount, formatCurrency(totalSpent), formatCurrency(average), `Sincronizado`, false);
+        renderPanel(orderCount, formatCurrency(totalSpent), formatCurrency(average), statusLabel, false);
         injectDatesIntoDOM();
     }
 
@@ -326,7 +496,7 @@
             injectDatesIntoDOM();
         }
 
-        renderScrollTopButton();
+        renderNavFloatingButtons();
         setTimeout(updateDashboard, 1000);
         setTimeout(updateDashboard, 2500);
     });
