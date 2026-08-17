@@ -20,6 +20,17 @@
     let hasMorePagesDetected = false;
     let isFullySynced = false;
 
+    function loadFontAwesome() {
+        if (!document.getElementById('shopify-fa-css') && document.head) {
+            const link = document.createElement('link');
+            link.id = 'shopify-fa-css';
+            link.rel = 'stylesheet';
+            link.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css';
+            document.head.appendChild(link);
+        }
+    }
+    loadFontAwesome();
+
     function formatCurrency(amount) {
         return new Intl.NumberFormat('es-CO', {
             style: 'currency',
@@ -219,23 +230,33 @@
                 <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: center; justify-content: space-between; width: 100%;">
                     <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; flex: 1;">
                         <div style="min-width: 90px;">
-                            <span style="font-size: 11px; color: #70647a; display: block; font-weight: 500; text-transform: uppercase;">Órdenes</span>
+                            <span style="font-size: 11px; color: #70647a; display: flex; align-items: center; gap: 4px; font-weight: 500; text-transform: uppercase;">
+                                <i class="fa-solid fa-boxes-stacked" style="color: #70647a;"></i> Órdenes
+                            </span>
                             <span id="shopify-stat-count" style="font-size: 17px; font-weight: 700; color: #16081e;">${count}</span>
                         </div>
                         <div style="min-width: 130px;">
-                            <span style="font-size: 11px; color: #70647a; display: block; font-weight: 500; text-transform: uppercase;">Total Gastado</span>
+                            <span style="font-size: 11px; color: #70647a; display: flex; align-items: center; gap: 4px; font-weight: 500; text-transform: uppercase;">
+                                <i class="fa-solid fa-wallet" style="color: #70647a;"></i> Total Gastado
+                            </span>
                             <span id="shopify-stat-total" style="font-size: 17px; font-weight: 700; color: #16081e;">${totalSpentFormatted}</span>
                         </div>
                         <div style="min-width: 130px;">
-                            <span style="font-size: 11px; color: #70647a; display: block; font-weight: 500; text-transform: uppercase;">Sin Descuento</span>
+                            <span style="font-size: 11px; color: #70647a; display: flex; align-items: center; gap: 4px; font-weight: 500; text-transform: uppercase;">
+                                <i class="fa-solid fa-receipt" style="color: #70647a;"></i> Sin Descuento
+                            </span>
                             <span id="shopify-stat-gross" style="font-size: 17px; font-weight: 700; color: #555555;">${totalGrossFormatted}</span>
                         </div>
                         <div style="min-width: 130px;">
-                            <span style="font-size: 11px; color: #2e7d32; display: block; font-weight: 600; text-transform: uppercase;">Total Ahorrado 🎉</span>
+                            <span style="font-size: 11px; color: #2e7d32; display: flex; align-items: center; gap: 4px; font-weight: 600; text-transform: uppercase;">
+                                <i class="fa-solid fa-piggy-bank" style="color: #2e7d32;"></i> Total Ahorrado 🎉
+                            </span>
                             <span id="shopify-stat-savings" style="font-size: 17px; font-weight: 700; color: #2e7d32;">${totalSavingsFormatted}</span>
                         </div>
                         <div style="min-width: 120px;">
-                            <span style="font-size: 11px; color: #70647a; display: block; font-weight: 500; text-transform: uppercase;">Promedio</span>
+                            <span style="font-size: 11px; color: #70647a; display: flex; align-items: center; gap: 4px; font-weight: 500; text-transform: uppercase;">
+                                <i class="fa-solid fa-chart-line" style="color: #70647a;"></i> Promedio
+                            </span>
                             <span id="shopify-stat-avg" style="font-size: 17px; font-weight: 700; color: #16081e;">${avgFormatted}</span>
                         </div>
                     </div>
@@ -245,16 +266,16 @@
                             ${statusText}
                         </span>
                         ${statusText.includes('parcial') && !isAutoLoadingAll ? `
-                            <button id="shopify-btn-load-all" style="padding: 5px 10px; border-radius: 6px; border: 1px solid ${themeColor}; background: #ffffff; color: #16081e; font-size: 11px; font-weight: 600; cursor: pointer;">
-                                🔄 Cargar todos
+                            <button id="shopify-btn-load-all" style="padding: 5px 10px; border-radius: 6px; border: 1px solid ${themeColor}; background: #ffffff; color: #16081e; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                                <i class="fa-solid fa-cloud-arrow-down"></i> Cargar todos
                             </button>
                         ` : ''}
                         ${!statusText.includes('parcial') && !isAutoLoadingAll && !isSyncingDetails ? `
-                            <button id="shopify-btn-force-refresh" style="padding: 5px 10px; border-radius: 6px; border: 1px solid ${themeColor}; background: #ffffff; color: #16081e; font-size: 11px; font-weight: 600; cursor: pointer;">
-                                🔄 Actualizar
+                            <button id="shopify-btn-force-refresh" style="padding: 5px 10px; border-radius: 6px; border: 1px solid ${themeColor}; background: #ffffff; color: #16081e; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                                <i class="fa-solid fa-rotate-right"></i> Actualizar
                             </button>
-                            <button id="shopify-btn-clear-storage" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #d32f2f; background: #ffffff; color: #d32f2f; font-size: 11px; font-weight: 600; cursor: pointer;">
-                                🗑️ Borrar memoria
+                            <button id="shopify-btn-clear-storage" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #d32f2f; background: #ffffff; color: #d32f2f; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                                <i class="fa-solid fa-trash-can"></i> Borrar memoria
                             </button>
                         ` : ''}
                     </div>
@@ -264,7 +285,9 @@
                 <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center; justify-content: space-between; border-top: 1px solid #f0ecf4; padding-top: 12px;">
                     <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
                         <div style="display: flex; gap: 6px; align-items: center;">
-                            <span style="font-size: 12px; font-weight: 600; color: #4a3e56;">📅 Fecha:</span>
+                            <span style="font-size: 12px; font-weight: 600; color: #4a3e56; display: flex; align-items: center; gap: 4px;">
+                                <i class="fa-solid fa-calendar-days" style="color: #6b21a8;"></i> Fecha:
+                            </span>
                             <select id="shopify-filter-mode-select" style="padding: 5px 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 11px; font-family: inherit; background: #fff; cursor: pointer;">
                                 <option value="all" ${currentFilterMode === 'all' ? 'selected' : ''}>Todas</option>
                                 <option value="month" ${currentFilterMode === 'month' ? 'selected' : ''}>Este mes</option>
@@ -280,7 +303,9 @@
                         </div>
 
                         <div style="display: flex; gap: 6px; align-items: center;">
-                            <span style="font-size: 12px; font-weight: 600; color: #4a3e56;">🏷️ Descuentos:</span>
+                            <span style="font-size: 12px; font-weight: 600; color: #4a3e56; display: flex; align-items: center; gap: 4px;">
+                                <i class="fa-solid fa-tags" style="color: #6b21a8;"></i> Descuentos:
+                            </span>
                             <select id="shopify-filter-discount-select" style="padding: 5px 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 11px; font-family: inherit; background: #fff; cursor: pointer;">
                                 ${discountOptionsHtml}
                             </select>
@@ -288,11 +313,11 @@
                     </div>
 
                     <div style="display: flex; gap: 8px; align-items: center;">
-                        <button id="shopify-btn-first-order-panel" style="padding: 5px 10px; border-radius: 20px; border: 1px solid ${themeColor}; background: #f8f5fb; color: #16081e; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px;">
-                            ⬆️ Pedido más reciente
+                        <button id="shopify-btn-first-order-panel" style="padding: 5px 10px; border-radius: 20px; border: 1px solid ${themeColor}; background: #f8f5fb; color: #16081e; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                            <i class="fa-solid fa-arrow-up"></i> Pedido más reciente
                         </button>
-                        <button id="shopify-btn-last-order-panel" style="padding: 5px 10px; border-radius: 20px; border: 1px solid ${themeColor}; background: #f8f5fb; color: #16081e; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px;">
-                            ⬇️ Pedido más antiguo
+                        <button id="shopify-btn-last-order-panel" style="padding: 5px 10px; border-radius: 20px; border: 1px solid ${themeColor}; background: #f8f5fb; color: #16081e; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                            <i class="fa-solid fa-arrow-down"></i> Pedido más antiguo
                         </button>
                     </div>
                 </div>
@@ -346,6 +371,7 @@
             const btnForceRefresh = document.getElementById('shopify-btn-force-refresh');
             if (btnForceRefresh) {
                 btnForceRefresh.onclick = async () => {
+                    isSyncingDetails = false; // Reset lock
                     let currentOrders = getStoredOrders();
                     for (const k in currentOrders) {
                         if (currentOrders[k]) currentOrders[k].detailFetched = false;
