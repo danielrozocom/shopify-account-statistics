@@ -300,16 +300,19 @@
             top10RowsHtml = `<tr><td colspan="4" style="padding: 20px; text-align: center; color: #70647a;">Cargando/sin datos de productos...</td></tr>`;
         } else {
             topProductsList.forEach((p, idx) => {
-                const prodLink = p.url || `/products/${slugifyTitle(p.title)}`;
+                const titleHtml = p.url ? `
+                    <a href="${p.url}" target="_blank" rel="noopener noreferrer" style="font-weight: 600; font-size: 13px; color: #9333ea; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; transition: color 0.2s ease;" onmouseover="this.style.textDecoration='underline'; this.style.color='#6b21a8';" onmouseout="this.style.textDecoration='none'; this.style.color='#9333ea';">
+                        ${p.title} <span style="font-size: 11px; opacity: 0.8;">🔗</span>
+                    </a>
+                ` : `<span style="font-weight: 600; font-size: 13px; color: #16081e;">${p.title}</span>`;
+
                 const imgHtml = p.imageUrl ? `<img src="${p.imageUrl}" style="width: 36px; height: 36px; object-fit: cover; border-radius: 6px; border: 1px solid #e2d8ee;">` : `<div style="width: 36px; height: 36px; background: #f0ecf4; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px;">🛍️</div>`;
                 top10RowsHtml += `
                     <tr style="border-bottom: 1px solid #f0ecf4;">
                         <td style="padding: 10px 12px; font-weight: 700; color: #9333ea; font-size: 13px;">#${idx + 1}</td>
                         <td style="padding: 10px 12px; display: flex; align-items: center; gap: 10px;">
                             ${imgHtml}
-                            <a href="${prodLink}" target="_blank" rel="noopener noreferrer" style="font-weight: 600; font-size: 13px; color: #9333ea; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; transition: color 0.2s ease;" onmouseover="this.style.textDecoration='underline'; this.style.color='#6b21a8';" onmouseout="this.style.textDecoration='none'; this.style.color='#9333ea';">
-                                ${p.title} <span style="font-size: 11px; opacity: 0.8;">🔗</span>
-                            </a>
+                            ${titleHtml}
                         </td>
                         <td style="padding: 10px 12px; text-align: center; font-weight: 700; color: #16081e; font-size: 13px;">${p.quantity} und.</td>
                         <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #2e7d32; font-size: 13px;">${formatCurrency(p.totalSpent)}</td>
