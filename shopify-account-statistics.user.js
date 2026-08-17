@@ -497,36 +497,35 @@
             if (orderId && ordersMap[orderId]) {
                 const orderInfo = ordersMap[orderId];
                 const formattedDate = orderInfo.date ? formatOrderDate(orderInfo.date) : '';
-                const discountCode = orderInfo.discountCode ? ` · 🏷️ ${orderInfo.discountCode}` : '';
+                const discountCode = orderInfo.discountCode ? ` · ${orderInfo.discountCode}` : '';
 
-                const allSpans = Array.from(article.querySelectorAll('span, p, div'));
-                const subEl = allSpans.find(el => {
-                    const text = el.textContent || '';
-                    return text.includes(orderId) && (text.includes('COP') || text.includes('$'));
+                if (!formattedDate && !discountCode) return;
+
+                // Buscar el span interno exacto que contiene "#CJ..." y el monto
+                const spans = Array.from(article.querySelectorAll('span'));
+                const subSpan = spans.find(span => {
+                    const text = span.textContent || '';
+                    return text.includes(orderId) && (text.includes('COP') || text.includes('$') || text.includes('·'));
                 });
 
-                if (subEl) {
-                    let existingBadge = subEl.querySelector('.shopify-order-date-badge');
-                    const badgeText = `${discountCode}${formattedDate ? ` · 📅 ${formattedDate}` : ''}`;
+                if (subSpan) {
+                    let existingBadge = subSpan.querySelector('.shopify-order-date-badge');
+                    const badgeText = `${discountCode}${formattedDate ? ` · ${formattedDate}` : ''}`;
 
-                    if (badgeText) {
-                        if (existingBadge) {
-                            if (existingBadge.textContent !== badgeText) {
-                                existingBadge.textContent = badgeText;
-                            }
-                        } else {
-                            const badge = document.createElement('span');
-                            badge.className = 'shopify-order-date-badge';
-                            badge.style.cssText = `
-                                font-size: 0.95em;
-                                color: #6b5087;
-                                font-weight: 600;
-                                margin-left: 4px;
-                                display: inline;
-                            `;
-                            badge.textContent = badgeText;
-                            subEl.appendChild(badge);
+                    if (existingBadge) {
+                        if (existingBadge.textContent !== badgeText) {
+                            existingBadge.textContent = badgeText;
                         }
+                    } else {
+                        const badge = document.createElement('span');
+                        badge.className = 'shopify-order-date-badge';
+                        badge.style.cssText = `
+                            color: #70647a;
+                            font-weight: 400;
+                            display: inline;
+                        `;
+                        badge.textContent = badgeText;
+                        subSpan.appendChild(badge);
                     }
                 }
             }
