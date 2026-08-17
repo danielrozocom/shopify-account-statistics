@@ -253,6 +253,9 @@
                             <button id="shopify-btn-force-refresh" style="padding: 5px 10px; border-radius: 6px; border: 1px solid ${themeColor}; background: #ffffff; color: #16081e; font-size: 11px; font-weight: 600; cursor: pointer;">
                                 🔄 Actualizar
                             </button>
+                            <button id="shopify-btn-clear-storage" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #d32f2f; background: #ffffff; color: #d32f2f; font-size: 11px; font-weight: 600; cursor: pointer;">
+                                🗑️ Borrar memoria
+                            </button>
                         ` : ''}
                     </div>
                 </div>
@@ -350,6 +353,19 @@
                     saveStoredOrders(currentOrders);
                     updateDashboard();
                     await syncMissingOrderDetails();
+                };
+            }
+
+            const btnClearStorage = document.getElementById('shopify-btn-clear-storage');
+            if (btnClearStorage) {
+                btnClearStorage.onclick = () => {
+                    if (confirm('¿Deseas borrar toda la memoria guardada de los pedidos en este navegador?')) {
+                        localStorage.removeItem(STORAGE_KEY);
+                        currentFilterMode = 'all';
+                        currentDiscountFilter = 'all';
+                        updateDashboard();
+                        loadAllOrders();
+                    }
                 };
             }
         } else {
@@ -611,6 +627,7 @@
             try {
                 const resp = await targetWindow.fetch(graphqlUrl, {
                     method: 'POST',
+                    credentials: 'include',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         operationName: "LineItems",
@@ -655,6 +672,10 @@
 
                 if (resp.ok) {
                     const resJson = await resp.json();
+                    if (resJson?.data?.order && !resJson.data.order.name) {
+                        resJson.data.order.name = item.name;
+                    }
+
                     let currentOrders = getStoredOrders();
                     if (extractOrdersFromObj(resJson, currentOrders)) {
                         if (currentOrders[item.name]) {
@@ -669,7 +690,7 @@
                 }
             } catch (e) { }
 
-            await new Promise(r => setTimeout(r, 250));
+            await new Promise(r => setTimeout(r, 200));
         }
 
         isSyncingDetails = false;
