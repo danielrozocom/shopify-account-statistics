@@ -76,7 +76,9 @@
         search: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>`,
         trophy: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;color:#d97706;"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>`,
         bag: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><line x1="3" x2="21" y1="6" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`,
-        note: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:3px;color:#b45309;"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>`
+        note: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:3px;color:#b45309;"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>`,
+        card: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:3px;color:#2563eb;"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>`,
+        close: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`
     };
 
     function injectSpinStyles() {
@@ -212,6 +214,206 @@
             }
         }
         return Array.from(codes);
+    }
+
+    function getDiscountBreakdown(ordersMap) {
+        const discountsMap = {};
+        for (const key in ordersMap) {
+            const order = ordersMap[key];
+            if (order && order.discountCode) {
+                const code = order.discountCode;
+                if (!discountsMap[code]) {
+                    discountsMap[code] = { code: code, count: 0, totalSaved: 0 };
+                }
+                discountsMap[code].count += 1;
+                discountsMap[code].totalSaved += (order.discountAmount || 0);
+            }
+        }
+        return Object.values(discountsMap).sort((a, b) => b.totalSaved - a.totalSaved);
+    }
+
+    function getPaymentBreakdown(ordersMap) {
+        const paymentsMap = {};
+        for (const key in ordersMap) {
+            const order = ordersMap[key];
+            const method = order.paymentMethod || 'No especificado / Estándar';
+            if (!paymentsMap[method]) {
+                paymentsMap[method] = { method: method, count: 0, totalSpent: 0 };
+            }
+            paymentsMap[method].count += 1;
+            paymentsMap[method].totalSpent += (order.price || 0);
+        }
+        return Object.values(paymentsMap).sort((a, b) => b.totalSpent - a.totalSpent);
+    }
+
+    function openAnalyticsModal(ordersMap) {
+        let modal = document.getElementById('shopify-analytics-modal');
+        if (modal) modal.remove();
+
+        const top10 = getTopProducts(ordersMap, 10);
+        const discountBreakdown = getDiscountBreakdown(ordersMap);
+        const paymentBreakdown = getPaymentBreakdown(ordersMap);
+
+        modal = document.createElement('div');
+        modal.id = 'shopify-analytics-modal';
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(15, 7, 26, 0.75);
+            backdrop-filter: blur(8px);
+            z-index: 999999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            box-sizing: border-box;
+        `;
+
+        let top10RowsHtml = '';
+        if (top10.length === 0) {
+            top10RowsHtml = `<tr><td colspan="4" style="padding: 20px; text-align: center; color: #70647a;">Cargando/sin datos de productos...</td></tr>`;
+        } else {
+            top10.forEach((p, idx) => {
+                const imgHtml = p.imageUrl ? `<img src="${p.imageUrl}" style="width: 36px; height: 36px; object-fit: cover; border-radius: 6px; border: 1px solid #e2d8ee;">` : `<div style="width: 36px; height: 36px; background: #f0ecf4; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px;">🛍️</div>`;
+                top10RowsHtml += `
+                    <tr style="border-bottom: 1px solid #f0ecf4;">
+                        <td style="padding: 10px 12px; font-weight: 700; color: #9333ea; font-size: 13px;">#${idx + 1}</td>
+                        <td style="padding: 10px 12px; display: flex; align-items: center; gap: 10px;">
+                            ${imgHtml}
+                            <span style="font-weight: 600; font-size: 13px; color: #16081e;">${p.title}</span>
+                        </td>
+                        <td style="padding: 10px 12px; text-align: center; font-weight: 700; color: #16081e; font-size: 13px;">${p.quantity} und.</td>
+                        <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #2e7d32; font-size: 13px;">${formatCurrency(p.totalSpent)}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        let discountRowsHtml = '';
+        if (discountBreakdown.length === 0) {
+            discountRowsHtml = `<tr><td colspan="3" style="padding: 20px; text-align: center; color: #70647a;">No se registran cupones de descuento aplicados.</td></tr>`;
+        } else {
+            discountBreakdown.forEach((d) => {
+                discountRowsHtml += `
+                    <tr style="border-bottom: 1px solid #f0ecf4;">
+                        <td style="padding: 10px 12px; font-weight: 700; color: #b45309; font-size: 13px; display: flex; align-items: center; gap: 6px;">
+                            ${SVG_ICONS.tagInline} ${d.code}
+                        </td>
+                        <td style="padding: 10px 12px; text-align: center; font-weight: 600; font-size: 13px; color: #16081e;">${d.count} pedido(s)</td>
+                        <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #2e7d32; font-size: 13px;">${formatCurrency(d.totalSaved)} ahorrado</td>
+                    </tr>
+                `;
+            });
+        }
+
+        let paymentRowsHtml = '';
+        if (paymentBreakdown.length === 0) {
+            paymentRowsHtml = `<tr><td colspan="3" style="padding: 20px; text-align: center; color: #70647a;">Sin datos de medios de pago.</td></tr>`;
+        } else {
+            paymentBreakdown.forEach((pm) => {
+                paymentRowsHtml += `
+                    <tr style="border-bottom: 1px solid #f0ecf4;">
+                        <td style="padding: 10px 12px; font-weight: 600; color: #1d4ed8; font-size: 13px; display: flex; align-items: center; gap: 6px;">
+                            ${SVG_ICONS.card} ${pm.method}
+                        </td>
+                        <td style="padding: 10px 12px; text-align: center; font-weight: 600; font-size: 13px; color: #16081e;">${pm.count} pedido(s)</td>
+                        <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #16081e; font-size: 13px;">${formatCurrency(pm.totalSpent)}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        modal.innerHTML = `
+            <div style="background: #ffffff; border-radius: 16px; width: 100%; max-width: 720px; max-height: 85vh; overflow-y: auto; box-shadow: 0 20px 50px rgba(0,0,0,0.3); border: 2px solid #9333ea; font-family: 'Poppins', sans-serif;">
+                <div style="padding: 20px 24px; border-bottom: 1px solid #f0ecf4; display: flex; align-items: center; justify-content: space-between; background: linear-gradient(135deg, #f8f5fb 0%, #ffffff 100%); border-top-left-radius: 14px; border-top-right-radius: 14px; sticky: top;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="font-size: 22px;">🏆</span>
+                        <div>
+                            <h2 style="margin: 0; font-size: 18px; font-weight: 700; color: #16081e;">Reporte Completo de Analítica</h2>
+                            <span style="font-size: 12px; color: #70647a;">Top 10 Productos, Cupones Ahorrados y Medios de Pago</span>
+                        </div>
+                    </div>
+                    <button id="shopify-modal-close" style="background: #f0ecf4; border: none; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #16081e;">
+                        ${SVG_ICONS.close}
+                    </button>
+                </div>
+
+                <div style="padding: 20px 24px;">
+                    <!-- Seccion Top 10 Productos -->
+                    <div style="margin-bottom: 24px;">
+                        <h3 style="margin: 0 0 12px 0; font-size: 15px; font-weight: 700; color: #9333ea; display: flex; align-items: center; gap: 6px;">
+                            ${SVG_ICONS.trophy} Top 10 Productos Más Comprados
+                        </h3>
+                        <div style="border: 1px solid #e2d8ee; border-radius: 10px; overflow: hidden;">
+                            <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                                <thead>
+                                    <tr style="background: #f8f5fb; border-bottom: 1px solid #e2d8ee; font-size: 11px; color: #70647a; text-transform: uppercase;">
+                                        <th style="padding: 8px 12px; width: 40px;">Pos</th>
+                                        <th style="padding: 8px 12px;">Producto</th>
+                                        <th style="padding: 8px 12px; text-align: center;">Unidades</th>
+                                        <th style="padding: 8px 12px; text-align: right;">Total Invertido</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${top10RowsHtml}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Seccion Descuentos y Cupones -->
+                    <div style="margin-bottom: 24px;">
+                        <h3 style="margin: 0 0 12px 0; font-size: 15px; font-weight: 700; color: #b45309; display: flex; align-items: center; gap: 6px;">
+                            ${SVG_ICONS.piggy} Descuentos & Cupones Aplicados
+                        </h3>
+                        <div style="border: 1px solid #fef3c7; border-radius: 10px; overflow: hidden;">
+                            <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                                <thead>
+                                    <tr style="background: #fff8e1; border-bottom: 1px solid #fef3c7; font-size: 11px; color: #b45309; text-transform: uppercase;">
+                                        <th style="padding: 8px 12px;">Código de Cupón</th>
+                                        <th style="padding: 8px 12px; text-align: center;">Uso</th>
+                                        <th style="padding: 8px 12px; text-align: right;">Total Ahorrado</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${discountRowsHtml}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Seccion Medios de Pago -->
+                    <div>
+                        <h3 style="margin: 0 0 12px 0; font-size: 15px; font-weight: 700; color: #1d4ed8; display: flex; align-items: center; gap: 6px;">
+                            ${SVG_ICONS.card} Medios de Pago Utilizados
+                        </h3>
+                        <div style="border: 1px solid #dbeafe; border-radius: 10px; overflow: hidden;">
+                            <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                                <thead>
+                                    <tr style="background: #eff6ff; border-bottom: 1px solid #dbeafe; font-size: 11px; color: #1d4ed8; text-transform: uppercase;">
+                                        <th style="padding: 8px 12px;">Medio de Pago</th>
+                                        <th style="padding: 8px 12px; text-align: center;">Pedidos</th>
+                                        <th style="padding: 8px 12px; text-align: right;">Monto Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${paymentRowsHtml}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        const closeBtn = document.getElementById('shopify-modal-close');
+        if (closeBtn) closeBtn.onclick = () => modal.remove();
+        modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
     }
 
     function renderPanel(count, totalSpentFormatted, totalGrossFormatted, totalSavingsFormatted, avgFormatted, statusText, statusBgColor = null, isLoading = false) {
@@ -353,6 +555,9 @@
                                     ${SVG_ICONS.trash} Detener
                                 </button>
                             ` : ''}
+                            <button id="shopify-btn-open-modal" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #9333ea; background: linear-gradient(135deg, #f8f5fb 0%, #ffffff 100%); color: #9333ea; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                                ${SVG_ICONS.trophy} Ver Reporte & Top 10
+                            </button>
                             <button id="shopify-btn-clear-storage" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #d32f2f; background: #ffffff; color: #d32f2f; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
                                 ${SVG_ICONS.trash} Borrar memoria
                             </button>
@@ -443,6 +648,15 @@
 
             const btnLast = document.getElementById('shopify-btn-last-order-panel');
             if (btnLast) btnLast.onclick = () => scrollToOrder('last');
+
+            const btnOpenModal = document.getElementById('shopify-btn-open-modal');
+            if (btnOpenModal) btnOpenModal.onclick = () => openAnalyticsModal(ordersMap);
+
+            const topProdCard = document.getElementById('shopify-stat-card-topprod');
+            if (topProdCard) {
+                topProdCard.style.cursor = 'pointer';
+                topProdCard.onclick = () => openAnalyticsModal(ordersMap);
+            }
 
             const btnLoadAll = document.getElementById('shopify-btn-load-all');
             if (btnLoadAll) btnLoadAll.onclick = () => loadAllOrders();
@@ -785,11 +999,45 @@
             const extractedItems = extractLineItemsFromObj(obj);
             const combinedItems = (extractedItems.length > 0) ? extractedItems : (existing.items || null);
 
+    function extractPaymentMethodFromObj(obj) {
+        if (!obj || typeof obj !== 'object') return null;
+
+        const transactions = obj.transactions || obj.paymentCollections?.nodes?.[0]?.transactions || obj.data?.order?.transactions;
+        if (Array.isArray(transactions) && transactions.length > 0) {
+            for (const tx of transactions) {
+                if (tx?.typeDetails?.name) {
+                    let name = tx.typeDetails.name;
+                    const details = tx.paymentDetails;
+                    if (details?.cardBrand) {
+                        name += ` (${details.cardBrand} •••• ${details.last4 || ''})`;
+                    }
+                    return name.trim();
+                }
+                if (tx?.paymentDetails?.paymentMethodName) {
+                    return tx.paymentDetails.paymentMethodName;
+                }
+                if (tx?.paymentDetails?.cardBrand) {
+                    return `${tx.paymentDetails.cardBrand} •••• ${tx.paymentDetails.last4 || ''}`;
+                }
+                if (tx?.type) {
+                    return tx.type;
+                }
+            }
+        }
+
+        if (obj.paymentMethodName) return obj.paymentMethodName;
+        if (obj.paymentMethod) return typeof obj.paymentMethod === 'string' ? obj.paymentMethod : obj.paymentMethod.name;
+        if (obj.gateway) return obj.gateway;
+
+        return null;
+    }
+
             let extractedNote = obj.note || obj.customerNote || null;
             if (!extractedNote && Array.isArray(obj.customAttributes) && obj.customAttributes.length > 0) {
                 extractedNote = obj.customAttributes.map(a => `${a.key}: ${a.value}`).join(' | ');
             }
             const note = extractedNote || existing.note || null;
+            const paymentMethod = extractPaymentMethodFromObj(obj) || existing.paymentMethod || null;
 
             const hasDetailInfo = isDetailResponse || discountCode !== null || discountAmount > 0 || priceBeforeNum !== null || (combinedItems && combinedItems.length > 0);
 
@@ -803,7 +1051,8 @@
                 detailFetched: hasDetailInfo ? true : (existing.detailFetched || false),
                 verifiedNoDiscount: isDetailResponse ? true : (existing.verifiedNoDiscount || false),
                 items: combinedItems,
-                note: note
+                note: note,
+                paymentMethod: paymentMethod
             };
             updated = true;
             return updated;
@@ -1325,6 +1574,37 @@
                         `;
                         noteBadge.innerHTML = `${SVG_ICONS.note} <strong>Nota:</strong> ${orderInfo.note}`;
                         article.appendChild(noteBadge);
+                    }
+                }
+
+                // Inyección de la etiqueta de medio de pago si existe
+                if (orderInfo.paymentMethod) {
+                    let existingPaymentBadge = article.querySelector('.shopify-order-payment-badge');
+                    if (existingPaymentBadge) {
+                        if (existingPaymentBadge.getAttribute('data-payment') !== orderInfo.paymentMethod) {
+                            existingPaymentBadge.setAttribute('data-payment', orderInfo.paymentMethod);
+                            existingPaymentBadge.innerHTML = `${SVG_ICONS.card} <strong>Pago:</strong> ${orderInfo.paymentMethod}`;
+                        }
+                    } else {
+                        const paymentBadge = document.createElement('div');
+                        paymentBadge.className = 'shopify-order-payment-badge';
+                        paymentBadge.setAttribute('data-payment', orderInfo.paymentMethod);
+                        paymentBadge.style.cssText = `
+                            margin-top: 4px;
+                            font-size: 11px;
+                            background: #eff6ff;
+                            color: #1d4ed8;
+                            padding: 4px 10px;
+                            border-radius: 6px;
+                            font-weight: 500;
+                            display: inline-flex;
+                            align-items: center;
+                            gap: 4px;
+                            border: 1px solid #dbeafe;
+                            width: fit-content;
+                        `;
+                        paymentBadge.innerHTML = `${SVG_ICONS.card} <strong>Pago:</strong> ${orderInfo.paymentMethod}`;
+                        article.appendChild(paymentBadge);
                     }
                 }
             }
