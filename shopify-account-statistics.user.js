@@ -119,26 +119,13 @@
     }
 
     function attachPanelToDOM(panel) {
-        const firstArticle = document.querySelector('article');
-        if (firstArticle && document.body.contains(firstArticle)) {
-            if (panel.nextElementSibling !== firstArticle || panel.parentNode !== firstArticle.parentNode) {
-                firstArticle.parentNode.insertBefore(panel, firstArticle);
-            }
-            return;
-        }
+        const mainOrdersSection = document.querySelector('[data-inspector-id="orderListSection"]') || 
+                                  document.querySelector('article')?.parentNode || 
+                                  document.querySelector('main');
 
-        const h1 = document.querySelector('h1');
-        if (h1 && document.body.contains(h1)) {
-            if (panel.previousElementSibling !== h1) {
-                h1.parentNode.insertBefore(panel, h1.nextSibling || h1);
-            }
-            return;
-        }
-
-        const main = document.querySelector('main');
-        if (main && document.body.contains(main)) {
-            if (panel.parentNode !== main) {
-                main.insertBefore(panel, main.firstChild);
+        if (mainOrdersSection && document.body.contains(mainOrdersSection)) {
+            if (panel.parentNode !== mainOrdersSection || panel !== mainOrdersSection.firstChild) {
+                mainOrdersSection.insertBefore(panel, mainOrdersSection.firstChild);
             }
             return;
         }
@@ -231,6 +218,7 @@
                     </div>
                 </div>
 
+                <!-- Controles de Filtros de Fecha y Navegación Rápida -->
                 <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center; justify-content: space-between; border-top: 1px solid #f0ecf4; padding-top: 12px;">
                     <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                         <span style="font-size: 12px; font-weight: 600; color: #4a3e56;">📅 Filtrar por fecha:</span>
@@ -478,11 +466,18 @@
 
     function extractOrderIdFromArticle(article) {
         if (!article) return null;
-        const heading = article.querySelector('h2, h3, header, strong');
-        const ariaLabel = article.getAttribute('aria-labelledby') || "";
-        const textContent = heading ? heading.textContent : article.textContent || "";
-        const match = textContent.match(/(#[A-Za-z0-9\-_]+)/) || ariaLabel.match(/(#[A-Za-z0-9\-_]+)/);
-        return match ? match[1].trim() : null;
+
+        // 1. Probar atributos oficiales de id de orden en Shopify (aria-labelledby / h2.id)
+        const ariaLabel = article.getAttribute('aria-labelledby') || article.querySelector('h2')?.id || '';
+        let match = ariaLabel.match(/(#[A-Za-z0-9\-_]+)/);
+        if (match) return match[1].trim();
+
+        // 2. Probar coincidencia en el texto del artículo
+        const textContent = article.textContent || '';
+        match = textContent.match(/(#[A-Za-z0-9\-_]+)/);
+        if (match) return match[1].trim();
+
+        return null;
     }
 
     function injectDatesIntoDOM() {
@@ -507,20 +502,33 @@
                         color: #5c4275;
                         background: #f4ecfb;
                         border: 1px solid #d8c3ed;
-                        padding: 4px 10px;
+                        padding: 3px 8px;
                         border-radius: 6px;
                         display: inline-block;
-                        margin-top: 8px;
+                        margin-top: 6px;
                         margin-bottom: 4px;
                         font-weight: 600;
                     `;
                     badge.textContent = `📅 ${formattedDate}`;
 
-                    const headingDiv = article.querySelector('h2, h3, header, strong')?.closest('div');
-                    if (headingDiv) {
-                        headingDiv.parentNode.insertBefore(badge, headingDiv.nextSibling);
+                    // Insertar directamente debajo del subtítulo del ID de la orden (#CJ... · $... COP)
+                    const subElements = Array.from(article.querySelectorAll('span, p, div'));
+                    const subSpan = subElements.find(el => (el.textContent || '').includes(orderId));
+
+                    if (subSpan) {
+                        const targetDiv = subSpan.closest('div');
+                        if (targetDiv && targetDiv.parentNode) {
+                            targetDiv.parentNode.insertBefore(badge, targetDiv.nextSibling);
+                        } else {
+                            subSpan.parentNode.appendChild(badge);
+                        }
                     } else {
-                        article.insertBefore(badge, article.firstChild);
+                        const headingDiv = article.querySelector('h2, h3')?.closest('div');
+                        if (headingDiv && headingDiv.parentNode) {
+                            headingDiv.parentNode.insertBefore(badge, headingDiv.nextSibling);
+                        } else {
+                            article.insertBefore(badge, article.firstChild);
+                        }
                     }
                 }
             }
