@@ -330,11 +330,27 @@
                 }
 
                 let variantBadgeHtml = '';
-                if (p.variants && Object.keys(p.variants).length > 0) {
-                    const variantSummary = Object.entries(p.variants)
-                        .map(([vName, vQty]) => `${vName} (${vQty} und.)`)
-                        .join(' · ');
-                    variantBadgeHtml = `<span style="font-size: 10px; color: #6b21a8; background: #f3e8ff; border: 1px solid #e9d5ff; padding: 1px 6px; border-radius: 4px; font-weight: 500; margin-top: 3px; display: inline-block;" title="Variantes compradas: ${variantSummary}">🎨 ${variantSummary}</span>`;
+                if (Array.isArray(p.variantList) && p.variantList.length > 0) {
+                    const hasNonStandard = p.variantList.some(v => v.name !== 'Estándar');
+                    if (hasNonStandard || p.variantList.length > 1) {
+                        const itemsHtml = p.variantList.map(v => {
+                            let priceInfo = `${formatCurrency(v.minPrice)} / und.`;
+                            if (v.hasIncrease) {
+                                priceInfo = `<span style="color: #c2410c; font-weight: 700;">📈 ${formatCurrency(v.minPrice)} ➔ ${formatCurrency(v.maxPrice)} (+${v.increasePercent}%)</span>`;
+                            } else if (v.uniquePrices.length > 1) {
+                                priceInfo = `📈 ${formatCurrency(v.minPrice)} - ${formatCurrency(v.maxPrice)}`;
+                            }
+                            const orderLabel = v.ordersCount === 1 ? '1 compra' : `${v.ordersCount} compras`;
+                            return `<div style="margin-top: 2px;">• <strong style="color: #6b21a8;">${v.name}</strong>: ${v.quantity} und. en ${orderLabel} (${formatCurrency(v.totalSpent)}) — ${priceInfo}</div>`;
+                        }).join('');
+
+                        variantBadgeHtml = `
+                            <div style="margin-top: 6px; padding: 6px 10px; background: #fcf9fe; border: 1px solid #f0e6f7; border-radius: 8px; font-size: 11px; color: #4a3e56; text-align: left;">
+                                <div style="font-weight: 700; color: #7e22ce; margin-bottom: 2px;">🎨 Desglose por Variante (${p.variantList.length}):</div>
+                                ${itemsHtml}
+                            </div>
+                        `;
+                    }
                 }
 
                 top10RowsHtml += `
@@ -1078,9 +1094,10 @@
             const order = ordersMap[key];
             if (Array.isArray(order.items)) {
                 order.items.forEach(it => {
-                    if (!map[it.title]) {
-                        map[it.title] = {
-                            title: it.title,
+                    const prodTitle = it.title.trim();
+                    if (!map[prodTitle]) {
+                        map[prodTitle] = {
+                            title: prodTitle,
                             quantity: 0,
                             totalSpent: 0,
                             imageUrl: it.imageUrl,
@@ -1090,28 +1107,38 @@
                             variants: {}
                         };
                     }
-                    map[it.title].quantity += it.quantity;
-                    map[it.title].totalSpent += it.price;
-                    if (it.imageUrl && !map[it.title].imageUrl) {
-                        map[it.title].imageUrl = it.imageUrl;
+                    const qty = it.quantity > 0 ? it.quantity : 1;
+                    const unitPrice = qty > 0 ? (it.price / qty) : it.price;
+                    const variantName = it.variantTitle || 'Estándar';
+
+                    map[prodTitle].quantity += qty;
+                    map[prodTitle].totalSpent += it.price;
+                    if (it.imageUrl && !map[prodTitle].imageUrl) {
+                        map[prodTitle].imageUrl = it.imageUrl;
                     }
-                    if (it.url && !map[it.title].url) {
-                        map[it.title].url = it.url;
+                    if (it.url && !map[prodTitle].url) {
+                        map[prodTitle].url = it.url;
                     }
 
-                    if (it.variantTitle) {
-                        if (!map[it.title].variants[it.variantTitle]) {
-                            map[it.title].variants[it.variantTitle] = 0;
-                        }
-                        map[it.title].variants[it.variantTitle] += it.quantity;
+                    if (!map[prodTitle].variants[variantName]) {
+                        map[prodTitle].variants[variantName] = {
+                            name: variantName,
+                            quantity: 0,
+                            totalSpent: 0,
+                            prices: [],
+                            ordersCount: 0
+                        };
                     }
-
-                    const unitPrice = it.quantity > 0 ? (it.price / it.quantity) : it.price;
+                    map[prodTitle].variants[variantName].quantity += qty;
+                    map[prodTitle].variants[variantName].totalSpent += it.price;
+                    map[prodTitle].variants[variantName].ordersCount += 1;
                     if (unitPrice > 0) {
-                        map[it.title].prices.push(unitPrice);
+                        map[prodTitle].variants[variantName].prices.push(unitPrice);
+                        map[prodTitle].prices.push(unitPrice);
                     }
+
                     if (order.date) {
-                        map[it.title].dates.push(order.date);
+                        map[prodTitle].dates.push(order.date);
                     }
                 });
             }
@@ -1131,13 +1158,31 @@
                 dateRangeStr = firstDateStr === lastDateStr ? firstDateStr : `${firstDateStr} ➔ ${lastDateStr}`;
             }
 
+            const variantList = Object.values(p.variants).map(v => {
+                const uPrices = Array.from(new Set(v.prices.map(px => parseFloat(px.toFixed(2))))).sort((a, b) => a - b);
+                const minVPrice = uPrices.length > 0 ? uPrices[0] : 0;
+                const maxVPrice = uPrices.length > 0 ? uPrices[uPrices.length - 1] : 0;
+                const hasVIncrease = maxVPrice > minVPrice;
+                const increasePercent = hasVIncrease && minVPrice > 0 ? (((maxVPrice - minVPrice) / minVPrice) * 100).toFixed(1) : '0';
+
+                return {
+                    ...v,
+                    uniquePrices: uPrices,
+                    minPrice: minVPrice,
+                    maxPrice: maxVPrice,
+                    hasIncrease: hasVIncrease,
+                    increasePercent: increasePercent
+                };
+            }).sort((a, b) => b.quantity - a.quantity);
+
             return {
                 ...p,
                 minPrice,
                 maxPrice,
                 hasPriceVariation,
                 uniquePrices,
-                dateRangeStr
+                dateRangeStr,
+                variantList
             };
         });
 
