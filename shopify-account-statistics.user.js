@@ -1912,7 +1912,7 @@
             statusBgColor = '#0288d1'; // azul
             isFullySynced = false;
         } else if (isSyncingDetails && pendingSyncTotal > 0) {
-            statusLabel = `${SVG_ICONS.spin} Descuentos (${pendingSyncCurrent} de ${pendingSyncTotal})`;
+            statusLabel = `${SVG_ICONS.spin} Detalles (${pendingSyncCurrent} de ${pendingSyncTotal})`;
             statusBgColor = '#0288d1'; // azul
             isFullySynced = false;
         } else if (currentFilterMode !== 'all' || currentDiscountFilter !== 'all') {
