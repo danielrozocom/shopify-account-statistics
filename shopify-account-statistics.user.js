@@ -1546,8 +1546,8 @@
 
                     if (badgeText) {
                         if (existingBadge) {
-                            if (existingBadge.textContent !== badgeText) {
-                                existingBadge.textContent = badgeText;
+                            if (existingBadge.innerHTML !== badgeText) {
+                                existingBadge.innerHTML = badgeText;
                             }
                         } else {
                             const badge = document.createElement('span');
@@ -1559,15 +1559,33 @@
                                 opacity: 0.9;
                                 display: inline;
                             `;
-                            badge.textContent = badgeText;
+                            badge.innerHTML = badgeText;
                             subSpan.appendChild(badge);
                         }
                     }
                 }
 
+                // Contenedor interno de la tarjeta para NO desbordar horizontalmente como columna de article
+                const cardInnerContainer = subSpan?.parentElement || article.querySelector('h2')?.parentElement || article.firstElementChild || article;
+
+                let extraBadgesContainer = cardInnerContainer.querySelector('.shopify-order-extra-badges');
+                if ((orderInfo.note || orderInfo.paymentMethod) && !extraBadgesContainer) {
+                    extraBadgesContainer = document.createElement('div');
+                    extraBadgesContainer.className = 'shopify-order-extra-badges';
+                    extraBadgesContainer.style.cssText = `
+                        margin-top: 6px;
+                        display: flex;
+                        flex-wrap: wrap;
+                        gap: 6px;
+                        align-items: center;
+                        width: 100%;
+                    `;
+                    cardInnerContainer.appendChild(extraBadgesContainer);
+                }
+
                 // Inyección de la etiqueta de nota de pedido si existe
-                if (orderInfo.note) {
-                    let existingNoteBadge = article.querySelector('.shopify-order-note-badge');
+                if (orderInfo.note && extraBadgesContainer) {
+                    let existingNoteBadge = extraBadgesContainer.querySelector('.shopify-order-note-badge');
                     if (existingNoteBadge) {
                         if (existingNoteBadge.getAttribute('data-note') !== orderInfo.note) {
                             existingNoteBadge.setAttribute('data-note', orderInfo.note);
@@ -1578,11 +1596,10 @@
                         noteBadge.className = 'shopify-order-note-badge';
                         noteBadge.setAttribute('data-note', orderInfo.note);
                         noteBadge.style.cssText = `
-                            margin-top: 6px;
                             font-size: 11px;
                             background: #fff8e1;
                             color: #b45309;
-                            padding: 4px 10px;
+                            padding: 3px 8px;
                             border-radius: 6px;
                             font-weight: 500;
                             display: inline-flex;
@@ -1592,13 +1609,13 @@
                             width: fit-content;
                         `;
                         noteBadge.innerHTML = `${SVG_ICONS.note} <strong>Nota:</strong> ${orderInfo.note}`;
-                        article.appendChild(noteBadge);
+                        extraBadgesContainer.appendChild(noteBadge);
                     }
                 }
 
                 // Inyección de la etiqueta de medio de pago si existe
-                if (orderInfo.paymentMethod) {
-                    let existingPaymentBadge = article.querySelector('.shopify-order-payment-badge');
+                if (orderInfo.paymentMethod && extraBadgesContainer) {
+                    let existingPaymentBadge = extraBadgesContainer.querySelector('.shopify-order-payment-badge');
                     if (existingPaymentBadge) {
                         if (existingPaymentBadge.getAttribute('data-payment') !== orderInfo.paymentMethod) {
                             existingPaymentBadge.setAttribute('data-payment', orderInfo.paymentMethod);
@@ -1609,11 +1626,10 @@
                         paymentBadge.className = 'shopify-order-payment-badge';
                         paymentBadge.setAttribute('data-payment', orderInfo.paymentMethod);
                         paymentBadge.style.cssText = `
-                            margin-top: 4px;
                             font-size: 11px;
                             background: #eff6ff;
                             color: #1d4ed8;
-                            padding: 4px 10px;
+                            padding: 3px 8px;
                             border-radius: 6px;
                             font-weight: 500;
                             display: inline-flex;
@@ -1623,7 +1639,7 @@
                             width: fit-content;
                         `;
                         paymentBadge.innerHTML = `${SVG_ICONS.card} <strong>Pago:</strong> ${orderInfo.paymentMethod}`;
-                        article.appendChild(paymentBadge);
+                        extraBadgesContainer.appendChild(paymentBadge);
                     }
                 }
             }
