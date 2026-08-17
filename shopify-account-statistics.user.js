@@ -736,16 +736,19 @@
 
     function injectDatesIntoDOM() {
         const ordersMap = getStoredOrders();
-        const articles = document.querySelectorAll('article');
+        const articles = Array.from(document.querySelectorAll('article'));
+        const totalAllOrders = Object.keys(ordersMap).length || articles.length;
 
-        articles.forEach(article => {
+        articles.forEach((article, index) => {
             const orderId = extractOrderIdFromArticle(article);
             if (orderId && ordersMap[orderId]) {
                 const orderInfo = ordersMap[orderId];
                 const formattedDate = orderInfo.date ? formatOrderDate(orderInfo.date) : '';
                 const discountCode = orderInfo.discountCode ? ` · 🏷️ ${orderInfo.discountCode}` : '';
 
-                if (!formattedDate && !discountCode) return;
+                // Número consecutivo de pedido: #547 para el más reciente de arriba, descendiendo hasta #1
+                const orderIndexNum = totalAllOrders - index;
+                const indexPrefix = orderIndexNum > 0 ? `#${orderIndexNum} · ` : '';
 
                 // Buscar el span interno exacto que contiene "#CJ..." y el monto
                 const spans = Array.from(article.querySelectorAll('span'));
@@ -755,23 +758,47 @@
                 });
 
                 if (subSpan) {
+                    // Prepend del número correlativo #X si no existe
+                    let existingIndexBadge = subSpan.querySelector('.shopify-order-index-badge');
+                    if (existingIndexBadge) {
+                        if (existingIndexBadge.textContent !== indexPrefix) {
+                            existingIndexBadge.textContent = indexPrefix;
+                        }
+                    } else if (indexPrefix) {
+                        const indexBadge = document.createElement('span');
+                        indexBadge.className = 'shopify-order-index-badge';
+                        indexBadge.style.cssText = `
+                            color: inherit;
+                            font-weight: inherit;
+                            font-size: inherit;
+                            display: inline;
+                        `;
+                        indexBadge.textContent = indexPrefix;
+                        subSpan.insertBefore(indexBadge, subSpan.firstChild);
+                    }
+
+                    // Inyección de la fecha y descuento heredando el mismo color de texto nativo
                     let existingBadge = subSpan.querySelector('.shopify-order-date-badge');
                     const badgeText = `${discountCode}${formattedDate ? ` · ${formattedDate}` : ''}`;
 
-                    if (existingBadge) {
-                        if (existingBadge.textContent !== badgeText) {
-                            existingBadge.textContent = badgeText;
+                    if (badgeText) {
+                        if (existingBadge) {
+                            if (existingBadge.textContent !== badgeText) {
+                                existingBadge.textContent = badgeText;
+                            }
+                        } else {
+                            const badge = document.createElement('span');
+                            badge.className = 'shopify-order-date-badge';
+                            badge.style.cssText = `
+                                color: inherit;
+                                font-weight: inherit;
+                                font-size: inherit;
+                                opacity: 0.9;
+                                display: inline;
+                            `;
+                            badge.textContent = badgeText;
+                            subSpan.appendChild(badge);
                         }
-                    } else {
-                        const badge = document.createElement('span');
-                        badge.className = 'shopify-order-date-badge';
-                        badge.style.cssText = `
-                            color: #70647a;
-                            font-weight: 400;
-                            display: inline;
-                        `;
-                        badge.textContent = badgeText;
-                        subSpan.appendChild(badge);
                     }
                 }
             }
