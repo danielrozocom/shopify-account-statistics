@@ -314,9 +314,17 @@
 
                 let priceHistoryHtml = '';
                 if (p.hasPriceVariation) {
-                    priceHistoryHtml = `<span style="font-size: 11px; background: #fff3dc; color: #b45309; border: 1px solid #fef3c7; padding: 2px 6px; border-radius: 6px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;" title="Variación detectada: comprado a ${p.uniquePrices.map(formatCurrency).join(', ')}">📈 ${formatCurrency(p.minPrice)} - ${formatCurrency(p.maxPrice)}</span>`;
+                    priceHistoryHtml = `
+                        <span style="font-size: 11px; background: #fff3dc; color: #b45309; border: 1px solid #fef3c7; padding: 2px 6px; border-radius: 6px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;" title="Variación detectada: comprado a ${p.uniquePrices.map(formatCurrency).join(', ')} en el periodo ${p.dateRangeStr}">
+                            📈 ${formatCurrency(p.minPrice)} - ${formatCurrency(p.maxPrice)}
+                        </span>
+                        ${p.dateRangeStr ? `<span style="font-size: 10px; color: #70647a; display: block; margin-top: 2px;">📅 ${p.dateRangeStr}</span>` : ''}
+                    `;
                 } else if (p.minPrice > 0) {
-                    priceHistoryHtml = `<span style="font-size: 11px; color: #4a3e56; font-weight: 500;">${formatCurrency(p.minPrice)} / und.</span>`;
+                    priceHistoryHtml = `
+                        <span style="font-size: 11px; color: #4a3e56; font-weight: 500;">${formatCurrency(p.minPrice)} / und.</span>
+                        ${p.dateRangeStr ? `<span style="font-size: 10px; color: #70647a; display: block; margin-top: 2px;">📅 ${p.dateRangeStr}</span>` : ''}
+                    `;
                 } else {
                     priceHistoryHtml = `<span style="font-size: 11px; color: #70647a;">-</span>`;
                 }
@@ -1056,6 +1064,14 @@
         return items;
     }
 
+    function formatDateShort(dateStr) {
+        if (!dateStr) return '';
+        const d = parseSpanishDate(dateStr);
+        if (!d || isNaN(d.getTime())) return dateStr;
+        const months = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
+        return `${d.getDate()}/${months[d.getMonth()]}/${d.getFullYear()}`;
+    }
+
     function getTopProducts(ordersMap) {
         const map = {};
         for (const key in ordersMap) {
@@ -1070,6 +1086,7 @@
                             imageUrl: it.imageUrl,
                             url: it.url,
                             prices: [],
+                            dates: [],
                             variants: {}
                         };
                     }
@@ -1093,6 +1110,9 @@
                     if (unitPrice > 0) {
                         map[it.title].prices.push(unitPrice);
                     }
+                    if (order.date) {
+                        map[it.title].dates.push(order.date);
+                    }
                 });
             }
         }
@@ -1103,12 +1123,21 @@
             const maxPrice = uniquePrices.length > 0 ? uniquePrices[uniquePrices.length - 1] : 0;
             const hasPriceVariation = uniquePrices.length > 1;
 
+            const parsedDates = p.dates.map(d => parseSpanishDate(d)).filter(Boolean).sort((a, b) => a - b);
+            const firstDateStr = parsedDates.length > 0 ? formatDateShort(parsedDates[0].toISOString()) : null;
+            const lastDateStr = parsedDates.length > 0 ? formatDateShort(parsedDates[parsedDates.length - 1].toISOString()) : null;
+            let dateRangeStr = '';
+            if (firstDateStr && lastDateStr) {
+                dateRangeStr = firstDateStr === lastDateStr ? firstDateStr : `${firstDateStr} ➔ ${lastDateStr}`;
+            }
+
             return {
                 ...p,
                 minPrice,
                 maxPrice,
                 hasPriceVariation,
-                uniquePrices
+                uniquePrices,
+                dateRangeStr
             };
         });
 
