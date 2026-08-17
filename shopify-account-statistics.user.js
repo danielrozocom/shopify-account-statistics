@@ -20,6 +20,10 @@
     let hasMorePagesDetected = false;
     let isFullySynced = false;
 
+    function logAnalytics(msg, ...args) {
+        console.log(`%c[Shopify Analytics] ${msg}`, 'color: #9333ea; font-weight: bold;', ...args);
+    }
+
     const SVG_ICONS = {
         boxes: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>`,
         wallet: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1v-3"/><path d="M15 12h6v4h-6z"/></svg>`,
@@ -894,10 +898,13 @@
             defaultReqHeaders['Authorization'] = authHeader;
         }
 
+        logAnalytics(`🔄 Iniciando sincronización de ${pendingList.length} pedidos pendientes...`);
+
         try {
             for (let i = 0; i < pendingList.length; i++) {
                 pendingSyncCurrent = i + 1;
                 const item = pendingList[i];
+                logAnalytics(`🔄 [${i + 1}/${pendingList.length}] Consultando detalles, productos y notas de:`, item.name);
                 const numericId = item.gid.replace('gid://shopify/Order/', '');
                 const remixUrl = `${window.location.origin}${basePath}/account/orders/${numericId}?_data=routes%2Faccount.orders.%24id`;
 
@@ -1056,14 +1063,20 @@
             if (typeof Headers !== 'undefined' && headers instanceof Headers) {
                 const auth = headers.get('authorization') || headers.get('Authorization');
                 if (auth && auth.includes('shcat_')) {
-                    capturedAuthToken = auth;
-                    sessionStorage.setItem('shopify_auth_token', auth);
+                    if (capturedAuthToken !== auth) {
+                        capturedAuthToken = auth;
+                        sessionStorage.setItem('shopify_auth_token', auth);
+                        logAnalytics('🔑 Token Authorization shcat_ capturado:', auth.substring(0, 30) + '...');
+                    }
                 }
             } else if (typeof headers === 'object') {
                 for (const key in headers) {
                     if (key.toLowerCase() === 'authorization' && typeof headers[key] === 'string' && headers[key].includes('shcat_')) {
-                        capturedAuthToken = headers[key];
-                        sessionStorage.setItem('shopify_auth_token', headers[key]);
+                        if (capturedAuthToken !== headers[key]) {
+                            capturedAuthToken = headers[key];
+                            sessionStorage.setItem('shopify_auth_token', headers[key]);
+                            logAnalytics('🔑 Token Authorization shcat_ capturado:', headers[key].substring(0, 30) + '...');
+                        }
                         break;
                     }
                 }
@@ -1429,6 +1442,7 @@
     setupFetchInterceptor();
 
     window.addEventListener('load', () => {
+        logAnalytics('🚀 Userscript de Analítica de Pedidos inicializado correctamente.');
         renderPanel(0, "$ 0,00", "$ 0,00", "$ 0,00", "$ 0,00", "Cargando...", null, true);
 
         const cached = getStoredOrders();
