@@ -602,6 +602,308 @@
 
     let isSyncingDetails = false;
 
+    const EXACT_LINE_ITEMS_QUERY = `query LineItems($orderId: ID!, $lineItemsFirst: Int!, $lineItemsAfter: String, $redacted: Boolean = false, $skipCompareAtPricing: Boolean = true, $skipOnlineStoreUrl: Boolean = true) {
+  order(id: $orderId) {
+    ...LineItemOrder
+    __typename
+  }
+}
+
+fragment LineItemOrder on Order {
+  id
+  lineItemContainers {
+    ... on UnfulfilledDigitalLineItemContainer {
+      lineItems(first: 20) {
+        nodes {
+          ...LineItemContainerLineItem
+          __typename
+        }
+        __typename
+      }
+      __typename
+    }
+    ... on UnfulfilledGiftCardLineItemContainer {
+      lineItems(first: 20) {
+        pageInfo {
+          hasNextPage
+          endCursor
+          __typename
+        }
+        nodes {
+          ...LineItemContainerLineItem
+          __typename
+        }
+        __typename
+      }
+      __typename
+    }
+    ... on UnfulfilledPhysicalLineItemContainer {
+      lineItems(first: 20) {
+        pageInfo {
+          hasNextPage
+          endCursor
+          __typename
+        }
+        nodes {
+          ...LineItemContainerLineItem
+          __typename
+        }
+        __typename
+      }
+      __typename
+    }
+    __typename
+  }
+  lineItems: lineItemContainers {
+    ... on RemainingLineItemContainer {
+      id
+      lineItems(first: $lineItemsFirst, after: $lineItemsAfter) {
+        ...LineItem
+        pageInfo {
+          hasNextPage
+          endCursor
+          __typename
+        }
+        __typename
+      }
+      __typename
+    }
+    __typename
+  }
+  __typename
+}
+
+fragment LineItemContainerLineItem on LineItemContainerLineItem {
+  id
+  remainingQuantity
+  lineItem {
+    id
+    presentmentName
+    title
+    presentmentTitle
+    sku
+    image {
+      ...ImageThumbnail
+      __typename
+    }
+    group {
+      id
+      title
+      parentLineItemId
+      __typename
+    }
+    deliveryAgreement {
+      id
+      deliveryMethodType
+      __typename
+    }
+    __typename
+  }
+  __typename
+}
+
+fragment ImageThumbnail on Image {
+  id
+  url(transform: {maxWidth: 128, maxHeight: 128})
+  altText
+  __typename
+}
+
+fragment LineItem on RemainingLineItemContainerLineItemConnection {
+  nodes {
+    id
+    lineItem {
+      id
+      presentmentName
+      price {
+        ...Price
+        __typename
+      }
+      deliveryAgreement {
+        id
+        deliveryMethodType
+        brandedPromise {
+          handle
+          manageOrderUrl
+          promiseBrandDetailsUrl
+          termsAndConditionsUrl
+          lightLogo: compactLogo(theme: LIGHT) {
+            url
+            altText
+            __typename
+          }
+          darkLogo: compactLogo(theme: DARK) {
+            url
+            altText
+            __typename
+          }
+          __typename
+        }
+        claim {
+          id
+          status
+          expiresAt
+          ineligibleReason
+          paidWithShopPay
+          amount {
+            amount
+            currencyCode
+            __typename
+          }
+          __typename
+        }
+        deliveryDatetimeMax
+        __typename
+      }
+      legacyFee
+      legacyFeeTitle
+      legacyFeeDescription
+      quantity
+      requiresShipping
+      refundableQuantity
+      title
+      sku
+      presentmentTitle
+      presentmentVariantTitle
+      variantId
+      productId
+      productType
+      vendor
+      onlineStoreUrl @skip(if: $skipOnlineStoreUrl)
+      variantOptions {
+        name
+        value
+        __typename
+      }
+      currentTotalPrice: totalPriceWithDiscounts {
+        ...Price
+        __typename
+      }
+      totalPriceBeforeDiscounts: totalPriceBeforeDiscounts {
+        ...Price
+        __typename
+      }
+      totalPriceBeforeReductions: totalPriceBeforeReductions @skip(if: $skipCompareAtPricing) {
+        ...Price
+        __typename
+      }
+      compareAtSavings: compareAtSavings @skip(if: $skipCompareAtPricing) {
+        ...Price
+        __typename
+      }
+      totalPriceWithDiscounts: totalPriceWithDiscounts {
+        ...Price
+        __typename
+      }
+      discountAllocations {
+        allocatedAmount {
+          amount
+          currencyCode
+          __typename
+        }
+        discountApplication {
+          ... on AutomaticDiscountApplication {
+            title @skip(if: $redacted)
+            __typename
+          }
+          ... on DiscountCodeApplication {
+            code @skip(if: $redacted)
+            __typename
+          }
+          ... on ManualDiscountApplication {
+            title @skip(if: $redacted)
+            __typename
+          }
+          __typename
+        }
+        __typename
+      }
+      discountInformation {
+        title @skip(if: $redacted)
+        discountValue {
+          ...Price
+          __typename
+        }
+        __typename
+      }
+      groupTitle
+      group {
+        id
+        title
+        quantity
+        image {
+          url
+          id
+          __typename
+        }
+        isConcrete
+        parentLineItemId
+        onlineStoreUrl @skip(if: $skipOnlineStoreUrl)
+        totalPriceBeforeDiscounts {
+          ...Price
+          __typename
+        }
+        currentTotalPrice {
+          ...Price
+          __typename
+        }
+        discountInformation {
+          title @skip(if: $redacted)
+          discountValue {
+            ...Price
+            __typename
+          }
+          __typename
+        }
+        __typename
+      }
+      customAttributes {
+        key
+        value
+        __typename
+      }
+      activeChangeStatuses
+      image {
+        ...ImageThumbnail
+        __typename
+      }
+      sellingPlan {
+        sellingPlanId
+        name
+        recurringDeliveries
+        __typename
+      }
+      unitPrice {
+        price {
+          amount
+          currencyCode
+          __typename
+        }
+        measurement {
+          referenceUnit
+          referenceValue
+          __typename
+        }
+        __typename
+      }
+      __typename
+    }
+    __typename
+  }
+  pageInfo {
+    hasNextPage
+    endCursor
+    __typename
+  }
+  __typename
+}
+
+fragment Price on MoneyV2 {
+  amount
+  currencyCode
+  __typename
+}`;
+
     async function syncMissingOrderDetails() {
         if (isSyncingDetails) return;
         const ordersMap = getStoredOrders();
@@ -638,35 +940,7 @@
                             orderId: item.gid,
                             lineItemsFirst: 250
                         },
-                        query: `query LineItems($orderId: ID!, $lineItemsFirst: Int!) {
-                            order(id: $orderId) {
-                                id
-                                name
-                                totalPrice { amount currencyCode }
-                                processedAt
-                                lineItems: lineItemContainers {
-                                    ... on RemainingLineItemContainer {
-                                        lineItems(first: $lineItemsFirst) {
-                                            nodes {
-                                                lineItem {
-                                                    totalPriceBeforeDiscounts { amount currencyCode }
-                                                    totalPriceWithDiscounts { amount currencyCode }
-                                                    discountAllocations {
-                                                        allocatedAmount { amount currencyCode }
-                                                        discountApplication {
-                                                            ... on AutomaticDiscountApplication { title }
-                                                            ... on DiscountCodeApplication { code }
-                                                            ... on ManualDiscountApplication { title }
-                                                        }
-                                                    }
-                                                    discountInformation { title discountValue { amount currencyCode } }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }`
+                        query: EXACT_LINE_ITEMS_QUERY
                     })
                 });
 
