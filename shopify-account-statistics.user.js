@@ -484,38 +484,70 @@
         };
     }
 
+    function extractOrderIdFromArticle(article) {
+        if (!article) return null;
+        const heading = article.querySelector('h2, h3, header, strong');
+        const ariaLabel = article.getAttribute('aria-labelledby') || "";
+        const textContent = heading ? heading.textContent : article.textContent || "";
+        const match = textContent.match(/(#[A-Za-z0-9\-_]+)/) || ariaLabel.match(/(#[A-Za-z0-9\-_]+)/);
+        return match ? match[1].trim() : null;
+    }
+
     function injectDatesIntoDOM() {
         const ordersMap = getStoredOrders();
         const articles = document.querySelectorAll('article');
 
         articles.forEach(article => {
-            const heading = article.querySelector('h2, h3, header, strong');
-            if (heading) {
-                const orderIdText = heading.textContent.trim();
+            const orderId = extractOrderIdFromArticle(article);
+            if (orderId && ordersMap[orderId] && ordersMap[orderId].date) {
+                let existingBadge = article.querySelector('.shopify-order-date-badge');
+                const formattedDate = formatOrderDate(ordersMap[orderId].date);
 
-                if (ordersMap[orderIdText] && ordersMap[orderIdText].date) {
-                    let existingBadge = article.querySelector('.shopify-order-date-badge');
-                    const formattedDate = formatOrderDate(ordersMap[orderIdText].date);
+                if (existingBadge) {
+                    if (existingBadge.textContent !== `📅 ${formattedDate}`) {
+                        existingBadge.innerHTML = `📅 ${formattedDate}`;
+                    }
+                } else {
+                    const badge = document.createElement('div');
+                    badge.className = 'shopify-order-date-badge';
+                    badge.style.cssText = `
+                        font-size: 11px;
+                        color: #70647a;
+                        background: #f8f5fb;
+                        border: 1px solid #e0d6eb;
+                        padding: 3px 8px;
+                        border-radius: 6px;
+                        display: inline-block;
+                        margin-top: 6px;
+                        font-weight: 600;
+                    `;
+                    badge.innerHTML = `📅 ${formattedDate}`;
 
-                    if (existingBadge) {
-                        if (existingBadge.textContent !== `📅 ${formattedDate}`) {
-                            existingBadge.innerHTML = `📅 ${formattedDate}`;
-                        }
-                    } else {
-                        const badge = document.createElement('div');
-                        badge.className = 'shopify-order-date-badge';
-                        badge.style.cssText = `
-                            font-size: 11px;
-                            color: #70647a;
-                            background: #f8f5fb;
-                            padding: 4px 8px;
-                            border-radius: 6px;
-                            display: inline-block;
-                            margin-top: 6px;
-                            font-weight: 500;
-                        `;
-                        badge.innerHTML = `📅 ${formattedDate}`;
+                    const heading = article.querySelector('h2, h3, header, strong');
+                    if (heading) {
                         heading.parentNode.appendChild(badge);
+                    } else {
+                        article.insertBefore(badge, article.firstChild);
+                    }
+                }
+            }
+        });
+    }
+
+    function applyDOMDateFilter(filteredOrderIds) {
+        const filterSet = new Set(filteredOrderIds);
+        const articles = document.querySelectorAll('article');
+
+        articles.forEach(article => {
+            const orderId = extractOrderIdFromArticle(article);
+            if (orderId) {
+                if (currentFilterMode === 'all') {
+                    article.style.display = '';
+                } else {
+                    if (filterSet.has(orderId)) {
+                        article.style.display = '';
+                    } else {
+                        article.style.display = 'none';
                     }
                 }
             }
@@ -528,8 +560,8 @@
 
         const articles = document.querySelectorAll('article');
         articles.forEach(article => {
+            const orderId = extractOrderIdFromArticle(article);
             const textContent = article.textContent || "";
-            const orderMatch = textContent.match(/(#[A-Za-z0-9\-_]+)/);
             const priceMatch = textContent.match(/\$\s*([\d\.,]+)\s*COP/) || textContent.match(/([\d\.,]+)\s*COP/);
 
             const timeEl = article.querySelector('time');
@@ -538,8 +570,7 @@
                 extractedDate = timeEl.getAttribute('datetime') || timeEl.textContent;
             }
 
-            if (orderMatch && priceMatch) {
-                const orderId = orderMatch[1];
+            if (orderId && priceMatch) {
                 let cleanNumStr = priceMatch[1].replace(/\./g, '').replace(',', '.');
                 let price = parseFloat(cleanNumStr);
 
@@ -637,6 +668,7 @@
 
         renderPanel(orderCount, formatCurrency(totalSpent), formatCurrency(average), statusLabel, statusBgColor, false);
         injectDatesIntoDOM();
+        applyDOMDateFilter(filteredIds);
     }
 
     setupFetchInterceptor();
