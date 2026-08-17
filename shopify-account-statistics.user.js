@@ -312,18 +312,19 @@
 
                 const imgHtml = p.imageUrl ? `<img src="${p.imageUrl}" style="width: 36px; height: 36px; object-fit: cover; border-radius: 6px; border: 1px solid #e2d8ee;">` : `<div style="width: 36px; height: 36px; background: #f0ecf4; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px;">🛍️</div>`;
 
+                const historyTooltip = buildProductHistoryTooltip(p).replace(/"/g, '&quot;');
                 let priceHistoryHtml = '';
                 if (p.hasPriceVariation) {
                     priceHistoryHtml = `
-                        <span style="font-size: 11px; background: #fff3dc; color: #b45309; border: 1px solid #fef3c7; padding: 2px 6px; border-radius: 6px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;" title="Variación detectada: comprado a ${p.uniquePrices.map(formatCurrency).join(', ')} en el periodo ${p.dateRangeStr}">
+                        <span style="font-size: 11px; background: #fff3dc; color: #b45309; border: 1px solid #fef3c7; padding: 2px 6px; border-radius: 6px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; cursor: help;" title="${historyTooltip}">
                             📈 ${formatCurrency(p.minPrice)} - ${formatCurrency(p.maxPrice)}
                         </span>
-                        ${p.dateRangeStr ? `<span style="font-size: 10px; color: #70647a; display: block; margin-top: 2px;">📅 ${p.dateRangeStr}</span>` : ''}
+                        ${p.dateRangeStr ? `<span style="font-size: 10px; color: #70647a; display: block; margin-top: 2px; cursor: help;" title="${historyTooltip}">📅 ${p.dateRangeStr}</span>` : ''}
                     `;
                 } else if (p.minPrice > 0) {
                     priceHistoryHtml = `
-                        <span style="font-size: 11px; color: #4a3e56; font-weight: 500;">${formatCurrency(p.minPrice)} / und.</span>
-                        ${p.dateRangeStr ? `<span style="font-size: 10px; color: #70647a; display: block; margin-top: 2px;">📅 ${p.dateRangeStr}</span>` : ''}
+                        <span style="font-size: 11px; color: #4a3e56; font-weight: 500; cursor: help;" title="${historyTooltip}">${formatCurrency(p.minPrice)} / und.</span>
+                        ${p.dateRangeStr ? `<span style="font-size: 10px; color: #70647a; display: block; margin-top: 2px; cursor: help;" title="${historyTooltip}">📅 ${p.dateRangeStr}</span>` : ''}
                     `;
                 } else {
                     priceHistoryHtml = `<span style="font-size: 11px; color: #70647a;">-</span>`;
@@ -1049,6 +1050,7 @@
                 const title = item.title || item.presentmentName || item.presentmentTitle || item.name;
                 const quantity = item.quantity !== undefined ? parseInt(item.quantity, 10) : 1;
                 const price = item.currentTotalPrice?.amount || item.price?.amount || item.totalPriceWithDiscounts?.amount || 0;
+                const priceBefore = item.totalPriceBeforeDiscounts?.amount || item.priceBeforeDiscounts?.amount || item.originalPrice?.amount || price;
                 const imgUrl = item.image?.url || null;
                 const prodUrl = item.onlineStoreUrl || item.url || item.product?.onlineStoreUrl || (item.product?.handle ? `/products/${item.product.handle}` : null) || (item.variant?.product?.handle ? `/products/${item.variant.product.handle}` : null) || null;
 
@@ -1067,6 +1069,7 @@
                         variantTitle: cleanVariant,
                         quantity: !isNaN(quantity) ? quantity : 1,
                         price: !isNaN(parseFloat(price)) ? parseFloat(price) : 0,
+                        priceBefore: !isNaN(parseFloat(priceBefore)) ? parseFloat(priceBefore) : (!isNaN(parseFloat(price)) ? parseFloat(price) : 0),
                         imageUrl: imgUrl,
                         url: prodUrl
                     });
@@ -1088,6 +1091,34 @@
         return `${d.getDate()}/${months[d.getMonth()]}/${d.getFullYear()}`;
     }
 
+    function buildProductHistoryTooltip(p) {
+        if (!p || !Array.isArray(p.history) || p.history.length === 0) return '';
+
+        const lines = [];
+        lines.push(`📅 Periodo Activo: ${p.dateRangeStr || 'Sin fecha'}`);
+        lines.push(`📦 Total Comprado: ${p.quantity} und. en ${p.history.length} pedido(s)`);
+        lines.push(`--- Histórico de Compras ---`);
+
+        p.history.forEach((h, idx) => {
+            const dateFormatted = formatDateShort(h.date) || 'Sin fecha';
+            const paidStr = formatCurrency(h.unitPricePaid);
+            let line = `#${idx + 1} [${dateFormatted}] Pedido ${h.orderName}: Pagado ${paidStr}/und.`;
+            if (h.unitPriceGross && h.unitPriceGross > (h.unitPricePaid + 1)) {
+                const grossStr = formatCurrency(h.unitPriceGross);
+                const savedStr = formatCurrency(h.unitPriceGross - h.unitPricePaid);
+                line += ` (Lista sin desc: ${grossStr} | Ahorro: ${savedStr})`;
+            } else {
+                line += ` (Sin desc. adicional)`;
+            }
+            if (h.discountCode) {
+                line += ` [${h.discountCode}]`;
+            }
+            lines.push(line);
+        });
+
+        return lines.join('\n');
+    }
+
     function getTopProducts(ordersMap) {
         const map = {};
         for (const key in ordersMap) {
@@ -1104,11 +1135,13 @@
                             url: it.url,
                             prices: [],
                             dates: [],
+                            history: [],
                             variants: {}
                         };
                     }
                     const qty = it.quantity > 0 ? it.quantity : 1;
                     const unitPrice = qty > 0 ? (it.price / qty) : it.price;
+                    const unitPriceGross = qty > 0 ? (it.priceBefore ? it.priceBefore / qty : unitPrice) : unitPrice;
                     const variantName = it.variantTitle || 'Estándar';
 
                     map[prodTitle].quantity += qty;
@@ -1140,6 +1173,15 @@
                     if (order.date) {
                         map[prodTitle].dates.push(order.date);
                     }
+
+                    map[prodTitle].history.push({
+                        orderName: key,
+                        date: order.date || null,
+                        unitPricePaid: unitPrice,
+                        unitPriceGross: unitPriceGross,
+                        discountCode: order.discountCode || null,
+                        variantName: variantName
+                    });
                 });
             }
         }
@@ -1157,6 +1199,12 @@
             if (firstDateStr && lastDateStr) {
                 dateRangeStr = firstDateStr === lastDateStr ? firstDateStr : `${firstDateStr} ➔ ${lastDateStr}`;
             }
+
+            p.history.sort((a, b) => {
+                const da = parseSpanishDate(a.date);
+                const db = parseSpanishDate(b.date);
+                return (da && db) ? da - db : 0;
+            });
 
             const variantList = Object.values(p.variants).map(v => {
                 const uPrices = Array.from(new Set(v.prices.map(px => parseFloat(px.toFixed(2))))).sort((a, b) => a - b);
