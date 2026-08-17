@@ -1012,13 +1012,18 @@
                         finalOrders[item.name].detailFetched = true;
                         finalOrders[item.name].syncAttempts = 0;
                     } else {
-                        const currentAttempts = (finalOrders[item.name].syncAttempts || 0) + 1;
-                        finalOrders[item.name].syncAttempts = currentAttempts;
-                        if (currentAttempts >= 3) {
-                            finalOrders[item.name].detailFetched = true;
-                            logAnalytics(`⚠️ Máximo de 3 intentos alcanzado para: ${item.name}`);
+                        // Solo incrementar syncAttempts si se contó con token de autorización
+                        if (authHeader) {
+                            const currentAttempts = (finalOrders[item.name].syncAttempts || 0) + 1;
+                            finalOrders[item.name].syncAttempts = currentAttempts;
+                            if (currentAttempts >= 3) {
+                                finalOrders[item.name].detailFetched = true;
+                                logAnalytics(`⚠️ Máximo de 3 intentos alcanzado para: ${item.name}`);
+                            } else {
+                                logAnalytics(`⚠️ Intento ${currentAttempts}/3 fallido para: ${item.name}. Se reintentará en el próximo ciclo.`);
+                            }
                         } else {
-                            logAnalytics(`⚠️ Intento ${currentAttempts}/3 fallido para: ${item.name}. Se reintentará en el próximo ciclo.`);
+                            logAnalytics(`ℹ️ Esperando token de autorización para consultar: ${item.name}`);
                         }
                     }
                     saveStoredOrders(finalOrders);
