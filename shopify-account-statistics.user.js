@@ -119,20 +119,34 @@
         }
     }
 
-    function getPanelPlacement() {
-        const candidates = [
-            document.querySelector('h1'),
-            document.querySelector('header'),
-            document.querySelector('._17kya4u18'),
-            document.querySelector('main'),
-            document.querySelector('article')
-        ];
-        for (const candidate of candidates) {
-            if (candidate && document.body.contains(candidate)) {
-                return candidate;
+    function attachPanelToDOM(panel) {
+        const firstArticle = document.querySelector('article');
+        if (firstArticle && document.body.contains(firstArticle)) {
+            if (panel.nextElementSibling !== firstArticle || panel.parentNode !== firstArticle.parentNode) {
+                firstArticle.parentNode.insertBefore(panel, firstArticle);
             }
+            return;
         }
-        return document.body;
+
+        const h1 = document.querySelector('h1');
+        if (h1 && document.body.contains(h1)) {
+            if (panel.previousElementSibling !== h1) {
+                h1.parentNode.insertBefore(panel, h1.nextSibling || h1);
+            }
+            return;
+        }
+
+        const main = document.querySelector('main');
+        if (main && document.body.contains(main)) {
+            if (panel.parentNode !== main) {
+                main.insertBefore(panel, main.firstChild);
+            }
+            return;
+        }
+
+        if (!document.body.contains(panel)) {
+            document.body.insertBefore(panel, document.body.firstChild);
+        }
     }
 
     function renderPanel(count, total, avg, statusText, statusBgColor = null, isLoading = false) {
@@ -157,22 +171,15 @@
                 gap: 16px;
                 box-shadow: 0 4px 12px rgba(0,0,0,0.08);
                 width: 100%;
+                flex-basis: 100%;
+                grid-column: 1 / -1;
                 box-sizing: border-box;
                 z-index: 999;
             `;
         }
 
-        // Asegurar que el panel esté presente en el DOM
-        if (!document.body.contains(panel)) {
-            const placement = getPanelPlacement();
-            if (placement === document.body) {
-                document.body.insertBefore(panel, document.body.firstChild);
-            } else if (placement.tagName === 'ARTICLE') {
-                placement.parentNode.insertBefore(panel, placement);
-            } else {
-                placement.parentNode.insertBefore(panel, placement.nextSibling || placement);
-            }
-        }
+        // Insertar siempre encima de los pedidos (first article / main orders container)
+        attachPanelToDOM(panel);
 
         // Si el usuario está interactuando con un control dentro del panel, actualizar solo los valores
         const isEditing = panel.contains(document.activeElement);
