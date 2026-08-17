@@ -220,13 +220,18 @@
         const discountsMap = {};
         for (const key in ordersMap) {
             const order = ordersMap[key];
-            if (order && order.discountCode) {
-                const code = order.discountCode;
-                if (!discountsMap[code]) {
-                    discountsMap[code] = { code: code, count: 0, totalSaved: 0 };
+            if (order) {
+                let code = order.discountCode;
+                if (!code && (order.discountAmount && order.discountAmount > 0)) {
+                    code = 'Descuento Automático / Manual';
                 }
-                discountsMap[code].count += 1;
-                discountsMap[code].totalSaved += (order.discountAmount || 0);
+                if (code) {
+                    if (!discountsMap[code]) {
+                        discountsMap[code] = { code: code, count: 0, totalSaved: 0 };
+                    }
+                    discountsMap[code].count += 1;
+                    discountsMap[code].totalSaved += (order.discountAmount || 0);
+                }
             }
         }
         return Object.values(discountsMap).sort((a, b) => b.totalSaved - a.totalSaved);
@@ -894,16 +899,39 @@
 
     function findDeepDiscountCode(obj) {
         if (!obj || typeof obj !== 'object') return null;
-        if (obj.discountApplication?.code) return obj.discountApplication.code;
+
+        if (obj.discountApplication) {
+            return obj.discountApplication.code || obj.discountApplication.title || null;
+        }
+
+        if (Array.isArray(obj.discountApplications?.nodes) && obj.discountApplications.nodes.length > 0) {
+            for (const app of obj.discountApplications.nodes) {
+                const val = app.code || app.title;
+                if (val) return val;
+            }
+        }
+
         if (Array.isArray(obj.discountApplications) && obj.discountApplications.length > 0) {
-            return obj.discountApplications[0].code || obj.discountApplications[0].title || null;
+            for (const app of obj.discountApplications) {
+                const val = app.code || app.title;
+                if (val) return val;
+            }
         }
+
         if (Array.isArray(obj.allOrderLevelAppliedDiscounts) && obj.allOrderLevelAppliedDiscounts.length > 0) {
-            return obj.allOrderLevelAppliedDiscounts[0].title || obj.allOrderLevelAppliedDiscounts[0].code || null;
+            for (const app of obj.allOrderLevelAppliedDiscounts) {
+                const val = app.title || app.code;
+                if (val) return val;
+            }
         }
+
         if (Array.isArray(obj.discountInformation) && obj.discountInformation.length > 0) {
-            return obj.discountInformation[0].title || null;
+            for (const info of obj.discountInformation) {
+                const val = info.title || info.code;
+                if (val) return val;
+            }
         }
+
         if (obj.discountCode) return obj.discountCode;
 
         if (Array.isArray(obj)) {
