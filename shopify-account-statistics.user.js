@@ -822,11 +822,12 @@
                 const items = typeof item === 'object' && item !== null ? item.items : null;
                 const gid = typeof item === 'object' && item !== null ? item.gid : null;
                 const detailFetched = typeof item === 'object' && item !== null ? (item.detailFetched || false) : false;
+                const verifiedNoDiscount = typeof item === 'object' && item !== null ? (item.verifiedNoDiscount || false) : false;
                 const syncAttempts = typeof item === 'object' && item !== null ? (item.syncAttempts || 0) : 0;
 
                 if (!isNaN(price)) {
                     if (!cleaned[cleanKey]) {
-                        cleaned[cleanKey] = { price, priceBeforeDiscounts, discountAmount, date, discountCode, paymentMethod, note, items, gid, detailFetched, syncAttempts };
+                        cleaned[cleanKey] = { price, priceBeforeDiscounts, discountAmount, date, discountCode, paymentMethod, note, items, gid, detailFetched, verifiedNoDiscount, syncAttempts };
                     } else {
                         if (!cleaned[cleanKey].date && date) cleaned[cleanKey].date = date;
                         if (!cleaned[cleanKey].discountCode && discountCode) cleaned[cleanKey].discountCode = discountCode;
@@ -837,6 +838,7 @@
                         if (!cleaned[cleanKey].items && items) cleaned[cleanKey].items = items;
                         if (!cleaned[cleanKey].gid && gid) cleaned[cleanKey].gid = gid;
                         if (detailFetched) cleaned[cleanKey].detailFetched = true;
+                        if (verifiedNoDiscount) cleaned[cleanKey].verifiedNoDiscount = true;
                     }
                 }
             }
@@ -1196,7 +1198,7 @@
             const order = ordersMap[key];
             const numericMatch = key.match(/\d+/);
             const gid = order.gid || (numericMatch ? `gid://shopify/Order/${numericMatch[0]}` : null);
-            const isFullyVerified = order.detailFetched && (order.discountCode || order.verifiedNoDiscount);
+            const isFullyVerified = order.detailFetched || order.discountCode || order.verifiedNoDiscount;
             const attempts = order.syncAttempts || 0;
 
             if (gid && !isFullyVerified && attempts < 3) {
