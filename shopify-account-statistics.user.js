@@ -759,7 +759,7 @@
     let pendingSyncTotal = 0;
     let pendingSyncCurrent = 0;
 
-    const ORDER_DETAILS_QUERY = `query OrderDetails($orderId: ID!, $isBusinessCustomer: Boolean! = false, $redacted: Boolean = false) {
+    const ORDER_DETAILS_QUERY = `query OrderDetails($orderId: ID!) {
   order(id: $orderId) {
     id
     name
@@ -809,7 +809,7 @@
   }
 }`;
 
-    const LINE_ITEMS_QUERY = `query LineItems($orderId: ID!, $lineItemsFirst: Int! = 250, $redacted: Boolean = false, $skipCompareAtPricing: Boolean = true, $skipOnlineStoreUrl: Boolean = false) {
+    const LINE_ITEMS_QUERY = `query LineItems($orderId: ID!, $lineItemsFirst: Int! = 250) {
   order(id: $orderId) {
     id
     lineItems: lineItemContainers {
@@ -893,7 +893,7 @@
 
                 let fetchedSuccess = false;
 
-                // Estrategia 1 (PRIMARIA): GraphQL OrderDetails POST con token Authorization (Evita límites de tasa 429)
+                // Estrategia 1 (PRIMARIA): GraphQL OrderDetails POST con token Authorization
                 try {
                     const resp = await targetWindow.fetch(graphqlUrl + '?operation=OrderDetails', {
                         method: 'POST',
@@ -902,9 +902,7 @@
                         body: JSON.stringify({
                             operationName: 'OrderDetails',
                             variables: {
-                                orderId: item.gid,
-                                isBusinessCustomer: false,
-                                redacted: false
+                                orderId: item.gid
                             },
                             query: ORDER_DETAILS_QUERY
                         })
@@ -937,10 +935,7 @@
                                 operationName: 'LineItems',
                                 variables: {
                                     orderId: item.gid,
-                                    lineItemsFirst: 250,
-                                    redacted: false,
-                                    skipCompareAtPricing: true,
-                                    skipOnlineStoreUrl: false
+                                    lineItemsFirst: 250
                                 },
                                 query: LINE_ITEMS_QUERY
                             })
