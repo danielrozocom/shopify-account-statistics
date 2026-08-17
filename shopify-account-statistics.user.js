@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Shopify Orders Analytics Safe v4.9 - No Filters, Perfect Badges
+// @name         Shopify Account Order Statistics & Analytics
 // @namespace    http://tampermonkey.net/
-// @version      4.9
-// @description  Muestra todas las estadísticas y fechas exactas en las tarjetas de pedidos sin ningún filtro previo.
+// @version      5.0
+// @description  Muestra todas las estadísticas, métricas y fechas exactas en las tarjetas de pedidos de Shopify.
 // @author       Daniel Josue Rozo Vargas
 // @match        https://shopify.com/*/account/orders*
 // @grant        none
@@ -11,7 +11,7 @@
 (function () {
     'use strict';
 
-    const STORAGE_KEY = 'shopify_orders_database_v4.9';
+    const STORAGE_KEY = 'shopify_orders_database';
     let currentFilterMode = 'all'; // 'all', 'month', 'year', 'custom'
     let customStartDate = '';
     let customEndDate = '';
