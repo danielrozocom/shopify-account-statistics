@@ -296,13 +296,12 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 20px;
             box-sizing: border-box;
         `;
 
         let top10RowsHtml = '';
         if (topProductsList.length === 0) {
-            top10RowsHtml = `<tr><td colspan="4" style="padding: 20px; text-align: center; color: #70647a;">Cargando/sin datos de productos...</td></tr>`;
+            top10RowsHtml = `<tr><td colspan="5" style="padding: 20px; text-align: center; color: #70647a;">Cargando/sin datos de productos...</td></tr>`;
         } else {
             topProductsList.forEach((p, idx) => {
                 const titleHtml = p.url ? `
@@ -312,6 +311,16 @@
                 ` : `<span style="font-weight: 600; font-size: 13px; color: #16081e;">${p.title}</span>`;
 
                 const imgHtml = p.imageUrl ? `<img src="${p.imageUrl}" style="width: 36px; height: 36px; object-fit: cover; border-radius: 6px; border: 1px solid #e2d8ee;">` : `<div style="width: 36px; height: 36px; background: #f0ecf4; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px;">🛍️</div>`;
+
+                let priceHistoryHtml = '';
+                if (p.hasPriceVariation) {
+                    priceHistoryHtml = `<span style="font-size: 11px; background: #fff3dc; color: #b45309; border: 1px solid #fef3c7; padding: 2px 6px; border-radius: 6px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;" title="Variación detectada: comprado a ${p.uniquePrices.map(formatCurrency).join(', ')}">📈 ${formatCurrency(p.minPrice)} - ${formatCurrency(p.maxPrice)}</span>`;
+                } else if (p.minPrice > 0) {
+                    priceHistoryHtml = `<span style="font-size: 11px; color: #4a3e56; font-weight: 500;">${formatCurrency(p.minPrice)} / und.</span>`;
+                } else {
+                    priceHistoryHtml = `<span style="font-size: 11px; color: #70647a;">-</span>`;
+                }
+
                 top10RowsHtml += `
                     <tr style="border-bottom: 1px solid #f0ecf4;">
                         <td style="padding: 10px 12px; font-weight: 700; color: #9333ea; font-size: 13px;">#${idx + 1}</td>
@@ -320,6 +329,7 @@
                             ${titleHtml}
                         </td>
                         <td style="padding: 10px 12px; text-align: center; font-weight: 700; color: #16081e; font-size: 13px;">${p.quantity} und.</td>
+                        <td style="padding: 10px 12px; text-align: center;">${priceHistoryHtml}</td>
                         <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #2e7d32; font-size: 13px;">${formatCurrency(p.totalSpent)}</td>
                     </tr>
                 `;
@@ -388,6 +398,7 @@
                                         <th style="padding: 8px 12px; width: 40px;">Pos</th>
                                         <th style="padding: 8px 12px;">Producto</th>
                                         <th style="padding: 8px 12px; text-align: center;">Unidades</th>
+                                        <th style="padding: 8px 12px; text-align: center;">Precio Unitario / Histórico</th>
                                         <th style="padding: 8px 12px; text-align: right;">Total Invertido</th>
                                     </tr>
                                 </thead>
@@ -1028,7 +1039,8 @@
                             quantity: 0,
                             totalSpent: 0,
                             imageUrl: it.imageUrl,
-                            url: it.url
+                            url: it.url,
+                            prices: []
                         };
                     }
                     map[it.title].quantity += it.quantity;
@@ -1039,10 +1051,31 @@
                     if (it.url && !map[it.title].url) {
                         map[it.title].url = it.url;
                     }
+
+                    const unitPrice = it.quantity > 0 ? (it.price / it.quantity) : it.price;
+                    if (unitPrice > 0) {
+                        map[it.title].prices.push(unitPrice);
+                    }
                 });
             }
         }
-        return Object.values(map).sort((a, b) => b.quantity - a.quantity);
+
+        const result = Object.values(map).map(p => {
+            const uniquePrices = Array.from(new Set(p.prices.map(px => parseFloat(px.toFixed(2))))).sort((a, b) => a - b);
+            const minPrice = uniquePrices.length > 0 ? uniquePrices[0] : 0;
+            const maxPrice = uniquePrices.length > 0 ? uniquePrices[uniquePrices.length - 1] : 0;
+            const hasPriceVariation = uniquePrices.length > 1;
+
+            return {
+                ...p,
+                minPrice,
+                maxPrice,
+                hasPriceVariation,
+                uniquePrices
+            };
+        });
+
+        return result.sort((a, b) => b.quantity - a.quantity);
     }
 
     function extractPaymentMethodFromObj(obj) {
