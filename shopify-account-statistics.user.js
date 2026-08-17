@@ -119,12 +119,26 @@
         }
     }
 
-    function renderPanel(count, total, avg, statusText, statusBgColor = null, isLoading = false) {
-        const headerContainer = document.querySelector('._17kya4u18._1fragem120._1fragem5u._1fragemws') || document.querySelector('h1');
-        if (!headerContainer) return false;
+    function getPanelPlacement() {
+        const candidates = [
+            document.querySelector('h1'),
+            document.querySelector('header'),
+            document.querySelector('._17kya4u18'),
+            document.querySelector('main'),
+            document.querySelector('article')
+        ];
+        for (const candidate of candidates) {
+            if (candidate && document.body.contains(candidate)) {
+                return candidate;
+            }
+        }
+        return document.body;
+    }
 
+    function renderPanel(count, total, avg, statusText, statusBgColor = null, isLoading = false) {
         let panel = document.getElementById('shopify-top-analytics-panel');
         const themeColor = getShopifyBrandColor();
+        const badgeColor = statusBgColor || themeColor;
 
         if (!panel) {
             panel = document.createElement('div');
@@ -146,12 +160,24 @@
                 box-sizing: border-box;
                 z-index: 999;
             `;
-            headerContainer.parentNode.insertBefore(panel, headerContainer.nextSibling);
         }
 
-        const badgeColor = statusBgColor || themeColor;
+        // Asegurar que el panel esté presente en el DOM
+        if (!document.body.contains(panel)) {
+            const placement = getPanelPlacement();
+            if (placement === document.body) {
+                document.body.insertBefore(panel, document.body.firstChild);
+            } else if (placement.tagName === 'ARTICLE') {
+                placement.parentNode.insertBefore(panel, placement);
+            } else {
+                placement.parentNode.insertBefore(panel, placement.nextSibling || placement);
+            }
+        }
 
-        if (isLoading) {
+        // Si el usuario está interactuando con un control dentro del panel, actualizar solo los valores
+        const isEditing = panel.contains(document.activeElement);
+
+        if (isLoading && !panel.querySelector('#shopify-stat-count')) {
             panel.innerHTML = `
                 <div style="display: flex; gap: 30px; flex-wrap: wrap; align-items: center; width: 100%;">
                     <div style="flex: 1; min-width: 130px;">
@@ -171,26 +197,26 @@
                     </div>
                 </div>
             `;
-        } else {
+        } else if (!isEditing || !panel.querySelector('#shopify-stat-count')) {
             panel.innerHTML = `
                 <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; justify-content: space-between; width: 100%;">
                     <div style="display: flex; gap: 24px; flex-wrap: wrap; align-items: center; flex: 1;">
                         <div style="min-width: 120px;">
                             <span style="font-size: 11px; color: #70647a; display: block; font-weight: 500; text-transform: uppercase;">Órdenes Totales</span>
-                            <span style="font-size: 18px; font-weight: 700; color: #16081e;">${count}</span>
+                            <span id="shopify-stat-count" style="font-size: 18px; font-weight: 700; color: #16081e;">${count}</span>
                         </div>
                         <div style="min-width: 150px;">
                             <span style="font-size: 11px; color: #70647a; display: block; font-weight: 500; text-transform: uppercase;">Total Gastado</span>
-                            <span style="font-size: 18px; font-weight: 700; color: #16081e;">${total}</span>
+                            <span id="shopify-stat-total" style="font-size: 18px; font-weight: 700; color: #16081e;">${total}</span>
                         </div>
                         <div style="min-width: 150px;">
                             <span style="font-size: 11px; color: #70647a; display: block; font-weight: 500; text-transform: uppercase;">Promedio por Orden</span>
-                            <span style="font-size: 18px; font-weight: 700; color: #16081e;">${avg}</span>
+                            <span id="shopify-stat-avg" style="font-size: 18px; font-weight: 700; color: #16081e;">${avg}</span>
                         </div>
                     </div>
                     
                     <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                        <span style="font-size: 11px; background: ${badgeColor}; color: #fff; padding: 5px 10px; border-radius: 6px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
+                        <span id="shopify-stat-badge" style="font-size: 11px; background: ${badgeColor}; color: #fff; padding: 5px 10px; border-radius: 6px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
                             ${statusText}
                         </span>
                         ${hasMorePagesDetected && !isAutoLoadingAll ? `
@@ -268,6 +294,22 @@
 
             const btnLoadAll = document.getElementById('shopify-btn-load-all');
             if (btnLoadAll) btnLoadAll.onclick = () => loadAllOrders();
+        } else {
+            // Actualización suave de valores sin destruir el DOM
+            const countEl = panel.querySelector('#shopify-stat-count');
+            if (countEl) countEl.textContent = count;
+
+            const totalEl = panel.querySelector('#shopify-stat-total');
+            if (totalEl) totalEl.textContent = total;
+
+            const avgEl = panel.querySelector('#shopify-stat-avg');
+            if (avgEl) avgEl.textContent = avg;
+
+            const badgeEl = panel.querySelector('#shopify-stat-badge');
+            if (badgeEl) {
+                badgeEl.textContent = statusText;
+                badgeEl.style.backgroundColor = badgeColor;
+            }
         }
         return true;
     }
@@ -584,7 +626,7 @@
     });
 
     setInterval(() => {
-        injectDatesIntoDOM();
+        updateDashboard();
     }, 1500);
 
 })();
