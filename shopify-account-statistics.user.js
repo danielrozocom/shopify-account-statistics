@@ -987,27 +987,26 @@
             for (const tx of transactions) {
                 if (!tx || typeof tx !== 'object') continue;
 
-                let brandOrLast4 = '';
+                const name = tx.typeDetails?.name || tx.paymentDetails?.paymentMethodName || tx.gateway;
                 const details = tx.paymentDetails;
+                let cardInfo = '';
+
                 if (details) {
                     if (details.cardBrand && details.last4) {
-                        brandOrLast4 = `${details.cardBrand} •••• ${details.last4}`;
+                        cardInfo = `${details.cardBrand} •••• ${details.last4}`;
                     } else if (details.cardBrand) {
-                        brandOrLast4 = details.cardBrand;
+                        cardInfo = details.cardBrand;
                     } else if (details.last4) {
-                        brandOrLast4 = `•••• ${details.last4}`;
-                    } else if (details.paymentMethodName) {
-                        return details.paymentMethodName;
+                        cardInfo = `•••• ${details.last4}`;
                     }
                 }
 
-                if (tx.typeDetails?.name) {
-                    const name = tx.typeDetails.name.trim();
-                    return brandOrLast4 ? `${name} (${brandOrLast4})` : name;
+                if (name) {
+                    const cleanName = name.trim();
+                    return cardInfo ? `${cleanName} (${cardInfo})` : cleanName;
                 }
-                if (brandOrLast4) return brandOrLast4;
-                if (tx.gateway) return tx.gateway;
-                if (tx.type) return tx.type;
+                if (cardInfo) return cardInfo;
+                if (tx.type && tx.type !== 'CARD') return tx.type;
             }
         }
 
@@ -1111,6 +1110,18 @@
     currentTotalPrice: totalPrice { amount currencyCode }
     subtotal: subtotalBeforeDiscounts { amount currencyCode }
     totalSavings { amount currencyCode }
+    transactions {
+      id
+      kind
+      status
+      type
+      typeDetails { name }
+      paymentDetails {
+        ... on CardPaymentDetails { cardBrand last4 }
+        ... on CustomGiftCardPaymentDetails { last4 }
+        ... on LocalPaymentMethodsPaymentDetails { paymentMethodName }
+      }
+    }
     discountApplications(first: 50) {
       nodes {
         ... on AutomaticDiscountApplication { title }
