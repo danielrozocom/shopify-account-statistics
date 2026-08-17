@@ -273,7 +273,7 @@
         let modal = document.getElementById('shopify-analytics-modal');
         if (modal) modal.remove();
 
-        const top10 = getTopProducts(ordersMap, 10);
+        const topProductsList = getTopProducts(ordersMap);
         const discountBreakdown = getDiscountBreakdown(ordersMap);
         const paymentBreakdown = getPaymentBreakdown(ordersMap);
 
@@ -296,10 +296,10 @@
         `;
 
         let top10RowsHtml = '';
-        if (top10.length === 0) {
+        if (topProductsList.length === 0) {
             top10RowsHtml = `<tr><td colspan="4" style="padding: 20px; text-align: center; color: #70647a;">Cargando/sin datos de productos...</td></tr>`;
         } else {
-            top10.forEach((p, idx) => {
+            topProductsList.forEach((p, idx) => {
                 const prodLink = p.url || `/products/${slugifyTitle(p.title)}`;
                 const imgHtml = p.imageUrl ? `<img src="${p.imageUrl}" style="width: 36px; height: 36px; object-fit: cover; border-radius: 6px; border: 1px solid #e2d8ee;">` : `<div style="width: 36px; height: 36px; background: #f0ecf4; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px;">🛍️</div>`;
                 top10RowsHtml += `
@@ -359,7 +359,7 @@
                         <span style="font-size: 22px;">🏆</span>
                         <div>
                             <h2 style="margin: 0; font-size: 18px; font-weight: 700; color: #16081e;">Reporte Completo de Analítica</h2>
-                            <span style="font-size: 12px; color: #70647a;">Top 10 Productos, Cupones Ahorrados y Medios de Pago</span>
+                            <span style="font-size: 12px; color: #70647a;">Productos Más Comprados, Cupones Ahorrados y Medios de Pago</span>
                         </div>
                     </div>
                     <button id="shopify-modal-close" style="background: #f0ecf4; border: none; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #16081e;">
@@ -368,10 +368,10 @@
                 </div>
 
                 <div style="padding: 20px 24px;">
-                    <!-- Seccion Top 10 Productos -->
+                    <!-- Seccion Productos Mas Comprados -->
                     <div style="margin-bottom: 24px;">
                         <h3 style="margin: 0 0 12px 0; font-size: 15px; font-weight: 700; color: #9333ea; display: flex; align-items: center; gap: 6px;">
-                            ${SVG_ICONS.trophy} Top 10 Productos Más Comprados
+                            ${SVG_ICONS.trophy} Productos Más Comprados
                         </h3>
                         <div style="border: 1px solid #e2d8ee; border-radius: 10px; overflow: hidden;">
                             <table style="width: 100%; border-collapse: collapse; text-align: left;">
@@ -583,7 +583,7 @@
                                 </button>
                             ` : ''}
                             <button id="shopify-btn-open-modal" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #9333ea; background: linear-gradient(135deg, #f8f5fb 0%, #ffffff 100%); color: #9333ea; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 5px;">
-                                ${SVG_ICONS.trophy} Ver Reporte & Top 10
+                                ${SVG_ICONS.trophy} Ver Reporte Completo
                             </button>
                             <button id="shopify-btn-clear-storage" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #d32f2f; background: #ffffff; color: #d32f2f; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
                                 ${SVG_ICONS.trash} Borrar memoria
