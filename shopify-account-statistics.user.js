@@ -893,16 +893,15 @@ fragment LineItem on RemainingLineItemContainerLineItemConnection {
   pageInfo {
     hasNextPage
     endCursor
-    __typename
-  }
-  __typename
-}
-
 fragment Price on MoneyV2 {
   amount
   currencyCode
   __typename
 }`;
+
+    let isSyncingDetails = false;
+    let pendingSyncTotal = 0;
+    let pendingSyncCurrent = 0;
 
     async function syncMissingOrderDetails() {
         if (isSyncingDetails) return;
@@ -917,14 +916,22 @@ fragment Price on MoneyV2 {
             }
         }
 
-        if (pendingList.length === 0) return;
+        if (pendingList.length === 0) {
+            pendingSyncTotal = 0;
+            pendingSyncCurrent = 0;
+            return;
+        }
 
         isSyncingDetails = true;
+        pendingSyncTotal = pendingList.length;
+        pendingSyncCurrent = 0;
+
         const targetWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
         const basePath = window.location.pathname.split('/account')[0];
         const graphqlUrl = window.location.origin + basePath + '/account/customer/api/unstable/graphql?operation=LineItems';
 
         for (let i = 0; i < pendingList.length; i++) {
+            pendingSyncCurrent = i + 1;
             const item = pendingList[i];
             try {
                 const resp = await targetWindow.fetch(graphqlUrl, {
@@ -956,7 +963,6 @@ fragment Price on MoneyV2 {
                             currentOrders[item.name].detailFetched = true;
                         }
                         saveStoredOrders(currentOrders);
-                        updateDashboard();
                     } else if (currentOrders[item.name]) {
                         currentOrders[item.name].detailFetched = true;
                         saveStoredOrders(currentOrders);
@@ -964,10 +970,14 @@ fragment Price on MoneyV2 {
                 }
             } catch (e) { }
 
-            await new Promise(r => setTimeout(r, 200));
+            updateDashboard();
+            await new Promise(r => setTimeout(r, 150));
         }
 
         isSyncingDetails = false;
+        pendingSyncTotal = 0;
+        pendingSyncCurrent = 0;
+        updateDashboard();
     }
 
     function setupFetchInterceptor() {
@@ -1222,6 +1232,10 @@ fragment Price on MoneyV2 {
 
         if (isAutoLoadingAll) {
             statusLabel = '🔄 Sincronizando...';
+            statusBgColor = '#0288d1'; // azul
+            isFullySynced = false;
+        } else if (isSyncingDetails && pendingSyncTotal > 0) {
+            statusLabel = `🔄 Descuentos (${pendingSyncCurrent} de ${pendingSyncTotal})`;
             statusBgColor = '#0288d1'; // azul
             isFullySynced = false;
         } else if (currentFilterMode !== 'all' || currentDiscountFilter !== 'all') {
