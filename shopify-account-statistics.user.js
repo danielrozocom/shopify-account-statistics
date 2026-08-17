@@ -125,7 +125,7 @@
         syncMissingOrderDetails();
     }
 
-    async function scrollToOrder(position) {
+    function scrollToOrder(position) {
         if (position === 'first') {
             const articles = document.querySelectorAll('article');
             if (articles.length > 0) {
@@ -134,11 +134,6 @@
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             }
         } else if (position === 'last') {
-            const loadBtn = getPaginationButton();
-            if (loadBtn) {
-                await loadAllOrders();
-            }
-
             const articles = document.querySelectorAll('article');
             if (articles.length > 0) {
                 articles[articles.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
