@@ -478,6 +478,58 @@
         } catch (e) { }
     }
 
+    function findDeepDiscountCode(obj) {
+        if (!obj || typeof obj !== 'object') return null;
+        if (obj.discountApplication?.code) return obj.discountApplication.code;
+        if (Array.isArray(obj.discountApplications) && obj.discountApplications.length > 0) {
+            return obj.discountApplications[0].code || obj.discountApplications[0].title || null;
+        }
+        if (Array.isArray(obj.discountInformation) && obj.discountInformation.length > 0) {
+            return obj.discountInformation[0].title || null;
+        }
+        if (obj.discountCode) return obj.discountCode;
+
+        if (Array.isArray(obj)) {
+            for (const item of obj) {
+                const res = findDeepDiscountCode(item);
+                if (res) return res;
+            }
+        } else {
+            for (const k in obj) {
+                if (typeof obj[k] === 'object') {
+                    const res = findDeepDiscountCode(obj[k]);
+                    if (res) return res;
+                }
+            }
+        }
+        return null;
+    }
+
+    function findDeepDiscountAmount(obj) {
+        if (!obj || typeof obj !== 'object') return 0;
+        let sum = 0;
+        if (obj.totalSavings?.amount) return parseFloat(obj.totalSavings.amount);
+        if (Array.isArray(obj.discountAllocations)) {
+            obj.discountAllocations.forEach(da => {
+                if (da.allocatedAmount?.amount) sum += parseFloat(da.allocatedAmount.amount);
+            });
+        }
+        if (Array.isArray(obj.discountInformation)) {
+            obj.discountInformation.forEach(di => {
+                if (di.discountValue?.amount) sum += parseFloat(di.discountValue.amount);
+            });
+        }
+
+        if (Array.isArray(obj)) {
+            obj.forEach(item => { sum += findDeepDiscountAmount(item); });
+        } else {
+            for (const k in obj) {
+                if (typeof obj[k] === 'object') sum += findDeepDiscountAmount(obj[k]);
+            }
+        }
+        return sum;
+    }
+
     function extractOrdersFromObj(obj, uniqueOrders) {
         if (!obj || typeof obj !== 'object') return false;
         let updated = false;
@@ -498,38 +550,16 @@
         const date = obj.processedAt || obj.createdAt || obj.processed_at || obj.created_at;
         const gid = (obj.id && typeof obj.id === 'string' && obj.id.startsWith('gid://')) ? obj.id : null;
 
-        // Capturar precio sin descuento y montos de descuento
+        // Capturar precio sin descuento
         const priceBefore = obj.totalPriceBeforeDiscounts?.amount || obj.subtotalBeforeDiscounts?.amount || null;
-        let discountAmount = 0;
-        if (obj.totalSavings?.amount) {
-            discountAmount = parseFloat(obj.totalSavings.amount);
-        } else if (Array.isArray(obj.discountAllocations)) {
-            obj.discountAllocations.forEach(da => {
-                if (da.allocatedAmount?.amount) discountAmount += parseFloat(da.allocatedAmount.amount);
-            });
-        } else if (Array.isArray(obj.discountInformation)) {
-            obj.discountInformation.forEach(di => {
-                if (di.discountValue?.amount) discountAmount += parseFloat(di.discountValue.amount);
-            });
-        }
-
-        // Capturar código o nombre del descuento desde la consulta de detalles de GraphQL (LineItems / OrderDetails)
-        let discountCode = null;
-        if (obj.discountApplication?.code) {
-            discountCode = obj.discountApplication.code;
-        } else if (Array.isArray(obj.discountApplications) && obj.discountApplications.length > 0) {
-            discountCode = obj.discountApplications[0].code || obj.discountApplications[0].title || null;
-        } else if (Array.isArray(obj.discountInformation) && obj.discountInformation.length > 0) {
-            discountCode = obj.discountInformation[0].title || null;
-        } else if (obj.discountCode) {
-            discountCode = obj.discountCode;
-        }
 
         if (name && typeof name === 'string' && (name.startsWith('#') || name.startsWith('CJ')) && amount !== undefined) {
             const priceNum = typeof amount === 'object' ? parseFloat(amount.amount) : parseFloat(amount);
             if (!isNaN(priceNum)) {
                 const formattedName = name.startsWith('#') ? name.trim() : `#${name.trim()}`;
                 const priceBeforeNum = priceBefore ? parseFloat(priceBefore) : null;
+                const discountCode = findDeepDiscountCode(obj);
+                const discountAmount = findDeepDiscountAmount(obj);
                 const existing = uniqueOrders[formattedName] || {};
 
                 uniqueOrders[formattedName] = {
@@ -593,6 +623,10 @@
                         },
                         query: `query LineItems($orderId: ID!, $lineItemsFirst: Int!) {
                             order(id: $orderId) {
+                                id
+                                name
+                                totalPrice { amount currencyCode }
+                                processedAt
                                 lineItems: lineItemContainers {
                                     ... on RemainingLineItemContainer {
                                         lineItems(first: $lineItemsFirst) {
@@ -622,12 +656,16 @@
                 if (resp.ok) {
                     const resJson = await resp.json();
                     let currentOrders = getStoredOrders();
-                    extractOrdersFromObj(resJson, currentOrders);
-                    if (currentOrders[item.name]) {
+                    if (extractOrdersFromObj(resJson, currentOrders)) {
+                        if (currentOrders[item.name]) {
+                            currentOrders[item.name].detailFetched = true;
+                        }
+                        saveStoredOrders(currentOrders);
+                        updateDashboard();
+                    } else if (currentOrders[item.name]) {
                         currentOrders[item.name].detailFetched = true;
+                        saveStoredOrders(currentOrders);
                     }
-                    saveStoredOrders(currentOrders);
-                    updateDashboard();
                 }
             } catch (e) { }
 
