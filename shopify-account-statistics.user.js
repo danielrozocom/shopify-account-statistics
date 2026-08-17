@@ -431,7 +431,7 @@
 
             const badgeEl = panel.querySelector('#shopify-stat-badge');
             if (badgeEl) {
-                badgeEl.textContent = statusText;
+                badgeEl.innerHTML = statusText;
                 badgeEl.style.backgroundColor = badgeColor;
             }
         }
