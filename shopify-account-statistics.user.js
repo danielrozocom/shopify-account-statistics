@@ -480,6 +480,7 @@
         const name = obj.name || obj.orderNumber;
         const amount = obj.totalPrice?.amount || obj.currentTotalPrice?.amount || obj.totalPrice || obj.total;
         const date = obj.processedAt || obj.createdAt || obj.processed_at || obj.created_at;
+        const gid = (obj.id && typeof obj.id === 'string' && obj.id.startsWith('gid://')) ? obj.id : null;
 
         // Capturar precio sin descuento y montos de descuento
         const priceBefore = obj.totalPriceBeforeDiscounts?.amount || obj.subtotalBeforeDiscounts?.amount || null;
@@ -520,7 +521,9 @@
                     priceBeforeDiscounts: priceBeforeNum || existing.priceBeforeDiscounts || null,
                     discountAmount: discountAmount > 0 ? discountAmount : (existing.discountAmount || 0),
                     date: date || existing.date || null,
-                    discountCode: discountCode || existing.discountCode || null
+                    discountCode: discountCode || existing.discountCode || null,
+                    gid: gid || existing.gid || null,
+                    detailFetched: existing.detailFetched || false
                 };
                 updated = true;
             }
@@ -533,6 +536,89 @@
             }
         }
         return updated;
+    }
+
+    let isSyncingDetails = false;
+
+    async function syncMissingOrderDetails() {
+        if (isSyncingDetails) return;
+        const ordersMap = getStoredOrders();
+        const orderKeys = Object.keys(ordersMap);
+
+        const pendingList = [];
+        for (const key of orderKeys) {
+            const order = ordersMap[key];
+            if (order.gid && !order.detailFetched) {
+                pendingList.push({ name: key, gid: order.gid });
+            }
+        }
+
+        if (pendingList.length === 0) return;
+
+        isSyncingDetails = true;
+        const targetWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+        const basePath = window.location.pathname.split('/account')[0];
+        const graphqlUrl = window.location.origin + basePath + '/account/customer/api/unstable/graphql?operation=LineItems';
+
+        for (let i = 0; i < pendingList.length; i++) {
+            const item = pendingList[i];
+            try {
+                const resp = await targetWindow.fetch(graphqlUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        operationName: "LineItems",
+                        variables: {
+                            redacted: false,
+                            skipCompareAtPricing: true,
+                            skipOnlineStoreUrl: false,
+                            orderId: item.gid,
+                            lineItemsFirst: 250
+                        },
+                        query: `query LineItems($orderId: ID!, $lineItemsFirst: Int!) {
+                            order(id: $orderId) {
+                                lineItems: lineItemContainers {
+                                    ... on RemainingLineItemContainer {
+                                        lineItems(first: $lineItemsFirst) {
+                                            nodes {
+                                                lineItem {
+                                                    totalPriceBeforeDiscounts { amount currencyCode }
+                                                    totalPriceWithDiscounts { amount currencyCode }
+                                                    discountAllocations {
+                                                        allocatedAmount { amount currencyCode }
+                                                        discountApplication {
+                                                            ... on AutomaticDiscountApplication { title }
+                                                            ... on DiscountCodeApplication { code }
+                                                            ... on ManualDiscountApplication { title }
+                                                        }
+                                                    }
+                                                    discountInformation { title discountValue { amount currencyCode } }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }`
+                    })
+                });
+
+                if (resp.ok) {
+                    const resJson = await resp.json();
+                    let currentOrders = getStoredOrders();
+                    extractOrdersFromObj(resJson, currentOrders);
+                    if (currentOrders[item.name]) {
+                        currentOrders[item.name].detailFetched = true;
+                    }
+                    saveStoredOrders(currentOrders);
+                    updateDashboard();
+                }
+            } catch (e) { }
+
+            await new Promise(r => setTimeout(r, 250));
+        }
+
+        isSyncingDetails = false;
     }
 
     function setupFetchInterceptor() {
@@ -783,6 +869,7 @@
         renderPanel(orderCount, formatCurrency(totalSpent), formatCurrency(totalGross), formatCurrency(totalSavings), formatCurrency(average), statusLabel, statusBgColor, false);
         injectDatesIntoDOM();
         applyDOMDateFilter(filteredIds);
+        syncMissingOrderDetails();
     }
 
     setupFetchInterceptor();
