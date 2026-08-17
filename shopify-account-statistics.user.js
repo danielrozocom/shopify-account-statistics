@@ -419,14 +419,23 @@
         const amount = obj.totalPrice?.amount || obj.currentTotalPrice?.amount || obj.totalPrice || obj.total;
         const date = obj.processedAt || obj.createdAt || obj.processed_at || obj.created_at;
 
+        // Capturar código de descuento si se aplicó alguno en la orden
+        let discountCode = null;
+        if (obj.discountApplications && Array.isArray(obj.discountApplications) && obj.discountApplications.length > 0) {
+            discountCode = obj.discountApplications[0].code || obj.discountApplications[0].title || null;
+        } else if (obj.discountCode || obj.code) {
+            discountCode = obj.discountCode || obj.code;
+        }
+
         if (name && typeof name === 'string' && (name.startsWith('#') || name.startsWith('CJ')) && amount !== undefined) {
             const priceNum = typeof amount === 'object' ? parseFloat(amount.amount) : parseFloat(amount);
             if (!isNaN(priceNum)) {
                 const formattedName = name.startsWith('#') ? name.trim() : `#${name.trim()}`;
-                if (!uniqueOrders[formattedName] || (!uniqueOrders[formattedName].date && date)) {
+                if (!uniqueOrders[formattedName] || (!uniqueOrders[formattedName].date && date) || (discountCode && !uniqueOrders[formattedName].discountCode)) {
                     uniqueOrders[formattedName] = {
                         price: priceNum,
-                        date: date || uniqueOrders[formattedName]?.date || null
+                        date: date || uniqueOrders[formattedName]?.date || null,
+                        discountCode: discountCode || uniqueOrders[formattedName]?.discountCode || null
                     };
                     updated = true;
                 }
@@ -485,8 +494,10 @@
 
         articles.forEach(article => {
             const orderId = extractOrderIdFromArticle(article);
-            if (orderId && ordersMap[orderId] && ordersMap[orderId].date) {
-                const formattedDate = formatOrderDate(ordersMap[orderId].date);
+            if (orderId && ordersMap[orderId]) {
+                const orderInfo = ordersMap[orderId];
+                const formattedDate = orderInfo.date ? formatOrderDate(orderInfo.date) : '';
+                const discountCode = orderInfo.discountCode ? ` · 🏷️ ${orderInfo.discountCode}` : '';
 
                 const allSpans = Array.from(article.querySelectorAll('span, p, div'));
                 const subEl = allSpans.find(el => {
@@ -496,22 +507,26 @@
 
                 if (subEl) {
                     let existingBadge = subEl.querySelector('.shopify-order-date-badge');
-                    if (existingBadge) {
-                        if (existingBadge.textContent !== ` · 📅 ${formattedDate}`) {
-                            existingBadge.textContent = ` · 📅 ${formattedDate}`;
+                    const badgeText = `${discountCode}${formattedDate ? ` · 📅 ${formattedDate}` : ''}`;
+
+                    if (badgeText) {
+                        if (existingBadge) {
+                            if (existingBadge.textContent !== badgeText) {
+                                existingBadge.textContent = badgeText;
+                            }
+                        } else {
+                            const badge = document.createElement('span');
+                            badge.className = 'shopify-order-date-badge';
+                            badge.style.cssText = `
+                                font-size: 0.95em;
+                                color: #6b5087;
+                                font-weight: 600;
+                                margin-left: 4px;
+                                display: inline;
+                            `;
+                            badge.textContent = badgeText;
+                            subEl.appendChild(badge);
                         }
-                    } else {
-                        const badge = document.createElement('span');
-                        badge.className = 'shopify-order-date-badge';
-                        badge.style.cssText = `
-                            font-size: 0.95em;
-                            color: #6b5087;
-                            font-weight: 600;
-                            margin-left: 4px;
-                            display: inline;
-                        `;
-                        badge.textContent = ` · 📅 ${formattedDate}`;
-                        subEl.appendChild(badge);
                     }
                 }
             }
