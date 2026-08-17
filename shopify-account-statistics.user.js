@@ -872,6 +872,15 @@
         const basePath = window.location.pathname.split('/account')[0];
         const graphqlUrl = window.location.origin + basePath + '/account/customer/api/unstable/graphql';
 
+        const authHeader = capturedAuthToken || sessionStorage.getItem('shopify_auth_token');
+        const defaultReqHeaders = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        };
+        if (authHeader) {
+            defaultReqHeaders['Authorization'] = authHeader;
+        }
+
         try {
             for (let i = 0; i < pendingList.length; i++) {
                 pendingSyncCurrent = i + 1;
@@ -903,13 +912,13 @@
                     }
                 } catch (e1) { }
 
-                // Estrategia 2: GraphQL OrderDetails con nombre exacto de variable orderId y operationName
+                // Estrategia 2: GraphQL OrderDetails con token Authorization
                 if (!fetchedSuccess) {
                     try {
                         const resp = await targetWindow.fetch(graphqlUrl + '?operation=OrderDetails', {
                             method: 'POST',
                             credentials: 'include',
-                            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                            headers: defaultReqHeaders,
                             body: JSON.stringify({
                                 operationName: 'OrderDetails',
                                 variables: {
@@ -936,13 +945,13 @@
                     } catch (e2) { }
                 }
 
-                // Estrategia 3: GraphQL LineItems directo para extraer productos y descuentos si Estrategia 1 y 2 no bastaron
+                // Estrategia 3: GraphQL LineItems con token Authorization
                 if (!fetchedSuccess) {
                     try {
                         const resp = await targetWindow.fetch(graphqlUrl + '?operation=LineItems', {
                             method: 'POST',
                             credentials: 'include',
-                            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                            headers: defaultReqHeaders,
                             body: JSON.stringify({
                                 operationName: 'LineItems',
                                 variables: {
@@ -989,11 +998,39 @@
         }
     }
 
+    let capturedAuthToken = null;
+
+    function captureAuthTokenFromHeaders(headers) {
+        if (!headers) return;
+        try {
+            if (typeof Headers !== 'undefined' && headers instanceof Headers) {
+                const auth = headers.get('authorization') || headers.get('Authorization');
+                if (auth && auth.includes('shcat_')) {
+                    capturedAuthToken = auth;
+                    sessionStorage.setItem('shopify_auth_token', auth);
+                }
+            } else if (typeof headers === 'object') {
+                for (const key in headers) {
+                    if (key.toLowerCase() === 'authorization' && typeof headers[key] === 'string' && headers[key].includes('shcat_')) {
+                        capturedAuthToken = headers[key];
+                        sessionStorage.setItem('shopify_auth_token', headers[key]);
+                        break;
+                    }
+                }
+            }
+        } catch (e) { }
+    }
+
     function setupFetchInterceptor() {
         const targetWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
         const originalFetch = targetWindow.fetch;
 
         targetWindow.fetch = async function (...args) {
+            const options = args[1];
+            if (options && options.headers) {
+                captureAuthTokenFromHeaders(options.headers);
+            }
+
             const response = await originalFetch.apply(this, args);
             try {
                 let requestUrl = (typeof args[0] === 'string') ? args[0] : (args[0]?.url || '');
