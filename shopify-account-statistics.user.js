@@ -998,12 +998,15 @@ fragment Price on MoneyV2 {
         if (!article) return null;
 
         const ariaLabel = article.getAttribute('aria-labelledby') || article.querySelector('h2')?.id || '';
-        let match = ariaLabel.match(/(#[A-Za-z0-9\-_]+)/);
+        let match = ariaLabel.match(/(#(?:CJ|[A-Za-z]{2,})[A-Za-z0-9\-_]+)/i);
         if (match) return match[1].trim();
 
         const textContent = article.textContent || '';
-        match = textContent.match(/(#[A-Za-z0-9\-_]+)/);
+        match = textContent.match(/(#(?:CJ|[A-Za-z]{2,})[A-Za-z0-9\-_]+)/i);
         if (match) return match[1].trim();
+
+        match = textContent.match(/#(?![\d]{1,3}\s)[A-Za-z0-9\-_]{4,}/);
+        if (match) return match[0].trim();
 
         return null;
     }
