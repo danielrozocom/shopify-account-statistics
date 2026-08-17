@@ -494,12 +494,9 @@
 
         articles.forEach(article => {
             const orderId = extractOrderIdFromArticle(article);
-            if (orderId && ordersMap[orderId]) {
-                const orderInfo = ordersMap[orderId];
-                const formattedDate = orderInfo.date ? formatOrderDate(orderInfo.date) : '';
-                const discountCode = orderInfo.discountCode ? ` · ${orderInfo.discountCode}` : '';
-
-                if (!formattedDate && !discountCode) return;
+            if (orderId && ordersMap[orderId] && ordersMap[orderId].date) {
+                const formattedDate = formatOrderDate(ordersMap[orderId].date);
+                if (!formattedDate) return;
 
                 // Buscar el span interno exacto que contiene "#CJ..." y el monto
                 const spans = Array.from(article.querySelectorAll('span'));
@@ -510,7 +507,7 @@
 
                 if (subSpan) {
                     let existingBadge = subSpan.querySelector('.shopify-order-date-badge');
-                    const badgeText = `${discountCode}${formattedDate ? ` · ${formattedDate}` : ''}`;
+                    const badgeText = ` · ${formattedDate}`;
 
                     if (existingBadge) {
                         if (existingBadge.textContent !== badgeText) {
