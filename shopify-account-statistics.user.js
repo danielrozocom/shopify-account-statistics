@@ -767,10 +767,12 @@
     currentTotalPrice: totalPrice { amount currencyCode }
     subtotal: subtotalBeforeDiscounts { amount currencyCode }
     totalSavings { amount currencyCode }
-    discountApplications {
-      ... on AutomaticDiscountApplication { title }
-      ... on DiscountCodeApplication { code }
-      ... on ManualDiscountApplication { title }
+    discountApplications(first: 50) {
+      nodes {
+        ... on AutomaticDiscountApplication { title }
+        ... on DiscountCodeApplication { code }
+        ... on ManualDiscountApplication { title }
+      }
     }
     discountInformation {
       allOrderLevelAppliedDiscounts: allOrderLevelAppliedDiscountsOnSoldItems {
@@ -779,8 +781,6 @@
         discountApplicationType
         discountValue { amount currencyCode }
       }
-      title
-      discountValue { amount currencyCode }
     }
     lineItemContainers {
       ... on RemainingLineItemContainer {
@@ -798,6 +798,9 @@
                 }
               }
               discountInformation { title discountValue { amount currencyCode } }
+              image { url altText }
+              title
+              quantity
             }
           }
         }
