@@ -622,9 +622,15 @@
         // Capturar precio sin descuento
         const priceBefore = obj.totalPriceBeforeDiscounts?.amount || obj.subtotalBeforeDiscounts?.amount || null;
 
+        let targetKey = null;
         if (name && typeof name === 'string' && (name.startsWith('#') || name.startsWith('CJ'))) {
-            const formattedName = name.startsWith('#') ? name.trim() : `#${name.trim()}`;
-            const existing = uniqueOrders[formattedName] || {};
+            targetKey = name.startsWith('#') ? name.trim() : `#${name.trim()}`;
+        } else if (gid) {
+            targetKey = Object.keys(uniqueOrders).find(k => uniqueOrders[k].gid === gid);
+        }
+
+        if (targetKey) {
+            const existing = uniqueOrders[targetKey] || {};
             const rawPriceNum = (amount !== undefined) ? (typeof amount === 'object' ? parseFloat(amount.amount) : parseFloat(amount)) : NaN;
             const priceNum = !isNaN(rawPriceNum) ? rawPriceNum : (existing.price || 0);
 
@@ -634,9 +640,9 @@
 
             const hasDetailInfo = isDetailResponse || discountCode !== null || discountAmount > 0 || priceBeforeNum !== null;
 
-            uniqueOrders[formattedName] = {
+            uniqueOrders[targetKey] = {
                 price: priceNum,
-                priceBeforeDiscounts: priceBeforeNum || existing.priceBeforeDiscounts || null,
+                priceBeforeDiscounts: priceBeforeNum || existing.priceBeforeDiscounts || (priceNum && discountAmount > 0 ? priceNum + discountAmount : null),
                 discountAmount: discountAmount > 0 ? discountAmount : (existing.discountAmount || 0),
                 date: date || existing.date || null,
                 discountCode: discountCode || existing.discountCode || null,
