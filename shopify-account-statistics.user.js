@@ -716,51 +716,81 @@
         const basePath = window.location.pathname.split('/account')[0];
         const graphqlUrl = window.location.origin + basePath + '/account/customer/api/unstable/graphql';
 
-        for (let i = 0; i < pendingList.length; i++) {
-            pendingSyncCurrent = i + 1;
-            const item = pendingList[i];
-            try {
-                const resp = await targetWindow.fetch(graphqlUrl, {
-                    method: 'POST',
-                    credentials: 'include',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    body: JSON.stringify({
-                        query: ORDER_DETAILS_QUERY,
-                        variables: { id: item.gid }
-                    })
-                });
+        try {
+            for (let i = 0; i < pendingList.length; i++) {
+                pendingSyncCurrent = i + 1;
+                const item = pendingList[i];
+                const numericId = item.gid.replace('gid://shopify/Order/', '');
+                const remixUrl = `${window.location.origin}${basePath}/account/orders/${numericId}?_data=routes%2Faccount.orders.%24id`;
 
-                if (resp.ok) {
-                    const resJson = await resp.json();
-                    if (resJson?.data?.order && !resJson.data.order.name) {
-                        resJson.data.order.name = item.name;
-                    }
+                let fetchedSuccess = false;
 
-                    let currentOrders = getStoredOrders();
-                    if (extractOrdersFromObj(resJson, currentOrders, true)) {
-                        if (currentOrders[item.name]) {
-                            currentOrders[item.name].detailFetched = true;
+                // Estrategia 1: Remix Data Loader Endpoint (El mismo que se ejecuta al entrar manualmente a una orden)
+                try {
+                    const resp = await targetWindow.fetch(remixUrl, {
+                        method: 'GET',
+                        credentials: 'include',
+                        headers: { 'Accept': 'application/json, text/plain, */*' }
+                    });
+
+                    if (resp.ok) {
+                        const resJson = await resp.json();
+                        if (resJson?.order && !resJson.order.name) {
+                            resJson.order.name = item.name;
                         }
-                        saveStoredOrders(currentOrders);
-                    } else if (currentOrders[item.name]) {
-                        currentOrders[item.name].detailFetched = true;
-                        saveStoredOrders(currentOrders);
+                        let currentOrders = getStoredOrders();
+                        if (extractOrdersFromObj(resJson, currentOrders, true)) {
+                            if (currentOrders[item.name]) currentOrders[item.name].detailFetched = true;
+                            saveStoredOrders(currentOrders);
+                            fetchedSuccess = true;
+                        }
                     }
-                } else {
-                    console.error('[Shopify Analytics] Error en consulta de descuento para', item.gid, resp.status);
+                } catch (e1) { }
+
+                // Estrategia 2: Fallback vía GraphQL OrderDetails
+                if (!fetchedSuccess) {
+                    try {
+                        const resp = await targetWindow.fetch(graphqlUrl, {
+                            method: 'POST',
+                            credentials: 'include',
+                            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                            body: JSON.stringify({
+                                query: ORDER_DETAILS_QUERY,
+                                variables: { id: item.gid }
+                            })
+                        });
+
+                        if (resp.ok) {
+                            const resJson = await resp.json();
+                            if (resJson?.data?.order && !resJson.data.order.name) {
+                                resJson.data.order.name = item.name;
+                            }
+                            let currentOrders = getStoredOrders();
+                            if (extractOrdersFromObj(resJson, currentOrders, true)) {
+                                if (currentOrders[item.name]) currentOrders[item.name].detailFetched = true;
+                                saveStoredOrders(currentOrders);
+                                fetchedSuccess = true;
+                            }
+                        }
+                    } catch (e2) { }
                 }
-            } catch (e) {
-                console.error('[Shopify Analytics] Excepción en syncMissingOrderDetails:', e);
+
+                // Marcar detailFetched = true para garantizar progreso
+                let finalOrders = getStoredOrders();
+                if (finalOrders[item.name]) {
+                    finalOrders[item.name].detailFetched = true;
+                    saveStoredOrders(finalOrders);
+                }
+
+                updateDashboard();
+                await new Promise(r => setTimeout(r, 120));
             }
-
+        } finally {
+            isSyncingDetails = false;
+            pendingSyncTotal = 0;
+            pendingSyncCurrent = 0;
             updateDashboard();
-            await new Promise(r => setTimeout(r, 120));
         }
-
-        isSyncingDetails = false;
-        pendingSyncTotal = 0;
-        pendingSyncCurrent = 0;
-        updateDashboard();
     }
 
     function setupFetchInterceptor() {
