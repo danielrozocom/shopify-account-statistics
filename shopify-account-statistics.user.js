@@ -20,6 +20,7 @@
     let hasMorePagesDetected = false;
     let isFullySynced = false;
     let isSyncCancelled = false;
+    let userStoppedSync = false;
 
     function logAnalytics(msg, ...args) {
         console.log(`%c[Shopify Analytics] ${msg}`, 'color: #9333ea; font-weight: bold;', ...args);
@@ -449,6 +450,7 @@
             const btnStopSync = document.getElementById('shopify-btn-stop-sync');
             if (btnStopSync) {
                 btnStopSync.onclick = () => {
+                    userStoppedSync = true;
                     isSyncCancelled = true;
                     isSyncingDetails = false;
                     updateDashboard();
@@ -459,6 +461,7 @@
             const btnForceRefresh = document.getElementById('shopify-btn-force-refresh');
             if (btnForceRefresh) {
                 btnForceRefresh.onclick = async () => {
+                    userStoppedSync = false;
                     isSyncCancelled = false;
                     isSyncingDetails = false; // Reset lock
                     let currentOrders = getStoredOrders();
@@ -906,7 +909,7 @@
 }`;
 
     async function syncMissingOrderDetails() {
-        if (isSyncingDetails) return;
+        if (isSyncingDetails || userStoppedSync) return;
         const ordersMap = getStoredOrders();
         const orderKeys = Object.keys(ordersMap);
 
@@ -1466,7 +1469,11 @@
         let statusLabel = `${SVG_ICONS.check} Sincronizado`;
         let statusBgColor = '#2e7d32'; // verde
 
-        if (isAutoLoadingAll) {
+        if (userStoppedSync) {
+            statusLabel = `🛑 Detenido`;
+            statusBgColor = '#ea580c'; // naranja / rojo
+            isFullySynced = false;
+        } else if (isAutoLoadingAll) {
             statusLabel = `${SVG_ICONS.spin} Sincronizando...`;
             statusBgColor = '#0288d1'; // azul
             isFullySynced = false;
