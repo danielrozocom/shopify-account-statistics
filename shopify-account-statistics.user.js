@@ -551,6 +551,9 @@
         if (Array.isArray(obj.discountApplications) && obj.discountApplications.length > 0) {
             return obj.discountApplications[0].code || obj.discountApplications[0].title || null;
         }
+        if (Array.isArray(obj.allOrderLevelAppliedDiscounts) && obj.allOrderLevelAppliedDiscounts.length > 0) {
+            return obj.allOrderLevelAppliedDiscounts[0].title || obj.allOrderLevelAppliedDiscounts[0].code || null;
+        }
         if (Array.isArray(obj.discountInformation) && obj.discountInformation.length > 0) {
             return obj.discountInformation[0].title || null;
         }
@@ -577,6 +580,11 @@
         let sum = 0;
         if (obj.totalSavings?.amount && parseFloat(obj.totalSavings.amount) > 0) {
             return parseFloat(obj.totalSavings.amount);
+        }
+        if (Array.isArray(obj.allOrderLevelAppliedDiscounts)) {
+            obj.allOrderLevelAppliedDiscounts.forEach(da => {
+                if (da.discountValue?.amount) sum += parseFloat(da.discountValue.amount);
+            });
         }
         if (Array.isArray(obj.discountAllocations)) {
             obj.discountAllocations.forEach(da => {
@@ -666,20 +674,26 @@
     let pendingSyncTotal = 0;
     let pendingSyncCurrent = 0;
 
-    const ORDER_DETAILS_QUERY = `query OrderDetailsByID($id: ID!) {
-  order(id: $id) {
+    const ORDER_DETAILS_QUERY = `query OrderDetails($orderId: ID!, $isBusinessCustomer: Boolean! = false, $redacted: Boolean = false) {
+  order(id: $orderId) {
     id
     name
     processedAt
-    totalPrice { amount currencyCode }
+    currentTotalPrice: totalPrice { amount currencyCode }
+    subtotal: subtotalBeforeDiscounts { amount currencyCode }
     totalSavings { amount currencyCode }
-    totalPriceBeforeDiscounts { amount currencyCode }
     discountApplications {
       ... on AutomaticDiscountApplication { title }
       ... on DiscountCodeApplication { code }
       ... on ManualDiscountApplication { title }
     }
     discountInformation {
+      allOrderLevelAppliedDiscounts: allOrderLevelAppliedDiscountsOnSoldItems {
+        title
+        targetType
+        discountApplicationType
+        discountValue { amount currencyCode }
+      }
       title
       discountValue { amount currencyCode }
     }
@@ -747,7 +761,7 @@
 
                 let fetchedSuccess = false;
 
-                // Estrategia 1: Remix Data Loader Endpoint (El mismo que se ejecuta al entrar manualmente a una orden)
+                // Estrategia 1: Remix Data Loader Endpoint
                 try {
                     const resp = await targetWindow.fetch(remixUrl, {
                         method: 'GET',
@@ -769,16 +783,21 @@
                     }
                 } catch (e1) { }
 
-                // Estrategia 2: Fallback vía GraphQL OrderDetails
+                // Estrategia 2: GraphQL OrderDetails con nombre exacto de variable orderId y operationName
                 if (!fetchedSuccess) {
                     try {
-                        const resp = await targetWindow.fetch(graphqlUrl, {
+                        const resp = await targetWindow.fetch(graphqlUrl + '?operation=OrderDetails', {
                             method: 'POST',
                             credentials: 'include',
                             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                             body: JSON.stringify({
-                                query: ORDER_DETAILS_QUERY,
-                                variables: { id: item.gid }
+                                operationName: 'OrderDetails',
+                                variables: {
+                                    orderId: item.gid,
+                                    isBusinessCustomer: false,
+                                    redacted: false
+                                },
+                                query: ORDER_DETAILS_QUERY
                             })
                         });
 
