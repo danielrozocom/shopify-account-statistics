@@ -277,13 +277,16 @@
             top10RowsHtml = `<tr><td colspan="4" style="padding: 20px; text-align: center; color: #70647a;">Cargando/sin datos de productos...</td></tr>`;
         } else {
             top10.forEach((p, idx) => {
+                const prodLink = p.url || `/search?q=${encodeURIComponent(p.title)}`;
                 const imgHtml = p.imageUrl ? `<img src="${p.imageUrl}" style="width: 36px; height: 36px; object-fit: cover; border-radius: 6px; border: 1px solid #e2d8ee;">` : `<div style="width: 36px; height: 36px; background: #f0ecf4; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px;">🛍️</div>`;
                 top10RowsHtml += `
                     <tr style="border-bottom: 1px solid #f0ecf4;">
                         <td style="padding: 10px 12px; font-weight: 700; color: #9333ea; font-size: 13px;">#${idx + 1}</td>
                         <td style="padding: 10px 12px; display: flex; align-items: center; gap: 10px;">
                             ${imgHtml}
-                            <span style="font-weight: 600; font-size: 13px; color: #16081e;">${p.title}</span>
+                            <a href="${prodLink}" target="_blank" rel="noopener noreferrer" style="font-weight: 600; font-size: 13px; color: #9333ea; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; transition: color 0.2s ease;" onmouseover="this.style.textDecoration='underline'; this.style.color='#6b21a8';" onmouseout="this.style.textDecoration='none'; this.style.color='#9333ea';">
+                                ${p.title} <span style="font-size: 11px; opacity: 0.8;">🔗</span>
+                            </a>
                         </td>
                         <td style="padding: 10px 12px; text-align: center; font-weight: 700; color: #16081e; font-size: 13px;">${p.quantity} und.</td>
                         <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #2e7d32; font-size: 13px;">${formatCurrency(p.totalSpent)}</td>
@@ -925,13 +928,15 @@
                 const quantity = item.quantity !== undefined ? parseInt(item.quantity, 10) : 1;
                 const price = item.currentTotalPrice?.amount || item.price?.amount || item.totalPriceWithDiscounts?.amount || 0;
                 const imgUrl = item.image?.url || null;
+                const prodUrl = item.url || item.onlineStoreUrl || item.product?.onlineStoreUrl || (item.product?.handle ? `/products/${item.product.handle}` : null) || (item.variant?.product?.handle ? `/products/${item.variant.product.handle}` : null) || null;
 
                 if (title && typeof title === 'string') {
                     items.push({
                         title: title.trim(),
                         quantity: !isNaN(quantity) ? quantity : 1,
                         price: !isNaN(parseFloat(price)) ? parseFloat(price) : 0,
-                        imageUrl: imgUrl
+                        imageUrl: imgUrl,
+                        url: prodUrl
                     });
                 }
             }
@@ -954,13 +959,17 @@
                             title: it.title,
                             quantity: 0,
                             totalSpent: 0,
-                            imageUrl: it.imageUrl
+                            imageUrl: it.imageUrl,
+                            url: it.url
                         };
                     }
                     map[it.title].quantity += it.quantity;
                     map[it.title].totalSpent += it.price;
                     if (it.imageUrl && !map[it.title].imageUrl) {
                         map[it.title].imageUrl = it.imageUrl;
+                    }
+                    if (it.url && !map[it.title].url) {
+                        map[it.title].url = it.url;
                     }
                 });
             }
