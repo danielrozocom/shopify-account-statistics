@@ -825,6 +825,16 @@
         });
     }
 
+    function extractGidFromArticle(article) {
+        if (!article) return null;
+        const htmlText = article.innerHTML || '';
+        const match = htmlText.match(/\/orders\/([0-9]+)/);
+        if (match) {
+            return `gid://shopify/Order/${match[1]}`;
+        }
+        return null;
+    }
+
     function scanDOMOrders() {
         let uniqueOrders = getStoredOrders();
         let newFound = false;
@@ -832,6 +842,7 @@
         const articles = document.querySelectorAll('article');
         articles.forEach(article => {
             const orderId = extractOrderIdFromArticle(article);
+            const gid = extractGidFromArticle(article);
             const textContent = article.textContent || "";
             const priceMatch = textContent.match(/\$\s*([\d\.,]+)\s*COP/) || textContent.match(/([\d\.,]+)\s*COP/);
 
@@ -847,11 +858,17 @@
 
                 if (!isNaN(price)) {
                     if (!uniqueOrders[orderId]) {
-                        uniqueOrders[orderId] = { price: price, date: extractedDate };
+                        uniqueOrders[orderId] = { price: price, date: extractedDate, gid: gid, detailFetched: false };
                         newFound = true;
-                    } else if (!uniqueOrders[orderId].date && extractedDate) {
-                        uniqueOrders[orderId].date = extractedDate;
-                        newFound = true;
+                    } else {
+                        if (!uniqueOrders[orderId].gid && gid) {
+                            uniqueOrders[orderId].gid = gid;
+                            newFound = true;
+                        }
+                        if (!uniqueOrders[orderId].date && extractedDate) {
+                            uniqueOrders[orderId].date = extractedDate;
+                            newFound = true;
+                        }
                     }
                 }
             }
