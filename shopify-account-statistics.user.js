@@ -869,9 +869,10 @@
             const numericMatch = key.match(/\d+/);
             const gid = order.gid || (numericMatch ? `gid://shopify/Order/${numericMatch[0]}` : null);
             const isFullyVerified = order.detailFetched && (order.discountCode || order.verifiedNoDiscount);
+            const attempts = order.syncAttempts || 0;
 
-            if (gid && !isFullyVerified) {
-                pendingList.push({ name: key, gid: gid });
+            if (gid && !isFullyVerified && attempts < 3) {
+                pendingList.push({ name: key, gid: gid, attempts: attempts });
             }
         }
 
@@ -1004,10 +1005,22 @@
                     } catch (e3) { }
                 }
 
-                // Marcar detailFetched = true para garantizar progreso
+                // Manejo de reintentos y actualización de estado
                 let finalOrders = getStoredOrders();
                 if (finalOrders[item.name]) {
-                    finalOrders[item.name].detailFetched = true;
+                    if (fetchedSuccess) {
+                        finalOrders[item.name].detailFetched = true;
+                        finalOrders[item.name].syncAttempts = 0;
+                    } else {
+                        const currentAttempts = (finalOrders[item.name].syncAttempts || 0) + 1;
+                        finalOrders[item.name].syncAttempts = currentAttempts;
+                        if (currentAttempts >= 3) {
+                            finalOrders[item.name].detailFetched = true;
+                            logAnalytics(`⚠️ Máximo de 3 intentos alcanzado para: ${item.name}`);
+                        } else {
+                            logAnalytics(`⚠️ Intento ${currentAttempts}/3 fallido para: ${item.name}. Se reintentará en el próximo ciclo.`);
+                        }
+                    }
                     saveStoredOrders(finalOrders);
                 }
 
