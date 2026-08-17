@@ -249,7 +249,7 @@
                         </div>
                         <div style="min-width: 130px;">
                             <span style="font-size: 11px; color: #2e7d32; display: flex; align-items: center; gap: 4px; font-weight: 600; text-transform: uppercase;">
-                                <i class="fa-solid fa-piggy-bank" style="color: #2e7d32;"></i> Total Ahorrado 🎉
+                                <i class="fa-solid fa-piggy-bank" style="color: #2e7d32;"></i> Total Ahorrado
                             </span>
                             <span id="shopify-stat-savings" style="font-size: 17px; font-weight: 700; color: #2e7d32;">${totalSavingsFormatted}</span>
                         </div>
@@ -270,9 +270,9 @@
                                 <i class="fa-solid fa-cloud-arrow-down"></i> Cargar todos
                             </button>
                         ` : ''}
-                        ${!statusText.includes('parcial') && !isAutoLoadingAll && !isSyncingDetails ? `
+                        ${!statusText.includes('parcial') && !isAutoLoadingAll ? `
                             <button id="shopify-btn-force-refresh" style="padding: 5px 10px; border-radius: 6px; border: 1px solid ${themeColor}; background: #ffffff; color: #16081e; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
-                                <i class="fa-solid fa-rotate-right"></i> Actualizar
+                                <i class="fa-solid fa-rotate ${isSyncingDetails ? 'fa-spin' : ''}"></i> ${isSyncingDetails ? 'Sincronizando...' : 'Actualizar'}
                             </button>
                             <button id="shopify-btn-clear-storage" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #d32f2f; background: #ffffff; color: #d32f2f; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
                                 <i class="fa-solid fa-trash-can"></i> Borrar memoria
@@ -996,32 +996,32 @@
         const isNewestInCache = newestDomOrderId && ordersMap[newestDomOrderId];
         const pagBtn = getPaginationButton();
 
-        let statusLabel = '✅ Sincronizado';
+        let statusLabel = '<i class="fa-solid fa-circle-check"></i> Sincronizado';
         let statusBgColor = '#2e7d32'; // verde
 
         if (isAutoLoadingAll) {
-            statusLabel = '🔄 Sincronizando...';
+            statusLabel = '<i class="fa-solid fa-rotate fa-spin"></i> Sincronizando...';
             statusBgColor = '#0288d1'; // azul
             isFullySynced = false;
         } else if (isSyncingDetails && pendingSyncTotal > 0) {
-            statusLabel = `🔄 Descuentos (${pendingSyncCurrent} de ${pendingSyncTotal})`;
+            statusLabel = `<i class="fa-solid fa-rotate fa-spin"></i> Descuentos (${pendingSyncCurrent} de ${pendingSyncTotal})`;
             statusBgColor = '#0288d1'; // azul
             isFullySynced = false;
         } else if (currentFilterMode !== 'all' || currentDiscountFilter !== 'all') {
             const filteredIds = filterOrders(ordersMap);
-            statusLabel = `🔍 Filtrando (${filteredIds.length} de ${totalAllOrders})`;
+            statusLabel = `<i class="fa-solid fa-magnifying-glass"></i> Filtrando (${filteredIds.length} de ${totalAllOrders})`;
             statusBgColor = '#7b1fa2'; // morado
             isFullySynced = isNewestInCache;
         } else if (totalAllOrders === 0) {
-            statusLabel = '🔄 Sincronizando...';
+            statusLabel = '<i class="fa-solid fa-rotate fa-spin"></i> Sincronizando...';
             statusBgColor = '#0288d1';
             isFullySynced = false;
         } else if (!isNewestInCache && pagBtn) {
-            statusLabel = '⚠️ Sincronización parcial';
+            statusLabel = '<i class="fa-solid fa-triangle-exclamation"></i> Sincronización parcial';
             statusBgColor = '#e65100';
             isFullySynced = false;
         } else {
-            statusLabel = '✅ Sincronizado';
+            statusLabel = '<i class="fa-solid fa-circle-check"></i> Sincronizado';
             statusBgColor = '#2e7d32';
             isFullySynced = true;
         }
