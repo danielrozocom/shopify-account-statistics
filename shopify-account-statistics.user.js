@@ -686,7 +686,13 @@
             }
 
             const btnLoadAll = document.getElementById('shopify-btn-load-all');
-            if (btnLoadAll) btnLoadAll.onclick = () => loadAllOrders();
+            if (btnLoadAll) {
+                btnLoadAll.onclick = () => {
+                    userStoppedSync = false;
+                    isSyncCancelled = false;
+                    loadAllOrders();
+                };
+            }
 
             const btnStopSync = document.getElementById('shopify-btn-stop-sync');
             if (btnStopSync) {
@@ -694,7 +700,10 @@
                     userStoppedSync = true;
                     isSyncCancelled = true;
                     isSyncingDetails = false;
-                    updateDashboard();
+                    isAutoLoadingAll = false;
+                    pendingSyncTotal = 0;
+                    pendingSyncCurrent = 0;
+                    updateDashboard(true);
                     logAnalytics('🛑 Sincronización detenida por el usuario.');
                 };
             }
@@ -704,20 +713,22 @@
                 btnForceRefresh.onclick = async () => {
                     userStoppedSync = false;
                     isSyncCancelled = false;
-                    isSyncingDetails = false; // Reset lock
+                    isSyncingDetails = false;
+                    pendingSyncTotal = 0;
+                    pendingSyncCurrent = 0;
                     let currentOrders = getStoredOrders();
                     for (const k in currentOrders) {
                         if (currentOrders[k]) currentOrders[k].detailFetched = false;
                     }
                     saveStoredOrders(currentOrders);
-                    updateDashboard();
+                    updateDashboard(true);
 
                     const pagBtn = getPaginationButton();
                     if (pagBtn) {
                         await loadAllOrders();
+                    } else {
+                        await syncMissingOrderDetails();
                     }
-
-                    await syncMissingOrderDetails();
                 };
             }
 
@@ -1227,7 +1238,7 @@
 }`;
 
     async function syncMissingOrderDetails() {
-        if (isSyncingDetails || userStoppedSync) return;
+        if (isSyncingDetails || userStoppedSync || isAutoLoadingAll) return;
         const ordersMap = getStoredOrders();
         const orderKeys = Object.keys(ordersMap);
 
@@ -1272,7 +1283,7 @@
 
         try {
             for (let i = 0; i < pendingList.length; i++) {
-                if (isSyncCancelled) {
+                if (isSyncCancelled || userStoppedSync) {
                     logAnalytics('🛑 Sincronización detenida por el usuario.');
                     break;
                 }
