@@ -419,12 +419,16 @@
         const amount = obj.totalPrice?.amount || obj.currentTotalPrice?.amount || obj.totalPrice || obj.total;
         const date = obj.processedAt || obj.createdAt || obj.processed_at || obj.created_at;
 
-        // Capturar código de descuento si se aplicó alguno en la orden
+        // Capturar código o nombre del descuento desde la consulta de detalles de GraphQL (LineItems / OrderDetails)
         let discountCode = null;
-        if (obj.discountApplications && Array.isArray(obj.discountApplications) && obj.discountApplications.length > 0) {
+        if (obj.discountApplication?.code) {
+            discountCode = obj.discountApplication.code;
+        } else if (Array.isArray(obj.discountApplications) && obj.discountApplications.length > 0) {
             discountCode = obj.discountApplications[0].code || obj.discountApplications[0].title || null;
-        } else if (obj.discountCode || obj.code) {
-            discountCode = obj.discountCode || obj.code;
+        } else if (Array.isArray(obj.discountInformation) && obj.discountInformation.length > 0) {
+            discountCode = obj.discountInformation[0].title || null;
+        } else if (obj.discountCode) {
+            discountCode = obj.discountCode;
         }
 
         if (name && typeof name === 'string' && (name.startsWith('#') || name.startsWith('CJ')) && amount !== undefined) {
@@ -494,9 +498,12 @@
 
         articles.forEach(article => {
             const orderId = extractOrderIdFromArticle(article);
-            if (orderId && ordersMap[orderId] && ordersMap[orderId].date) {
-                const formattedDate = formatOrderDate(ordersMap[orderId].date);
-                if (!formattedDate) return;
+            if (orderId && ordersMap[orderId]) {
+                const orderInfo = ordersMap[orderId];
+                const formattedDate = orderInfo.date ? formatOrderDate(orderInfo.date) : '';
+                const discountCode = orderInfo.discountCode ? ` · 🏷️ ${orderInfo.discountCode}` : '';
+
+                if (!formattedDate && !discountCode) return;
 
                 // Buscar el span interno exacto que contiene "#CJ..." y el monto
                 const spans = Array.from(article.querySelectorAll('span'));
@@ -507,7 +514,7 @@
 
                 if (subSpan) {
                     let existingBadge = subSpan.querySelector('.shopify-order-date-badge');
-                    const badgeText = ` · ${formattedDate}`;
+                    const badgeText = `${discountCode}${formattedDate ? ` · ${formattedDate}` : ''}`;
 
                     if (existingBadge) {
                         if (existingBadge.textContent !== badgeText) {
