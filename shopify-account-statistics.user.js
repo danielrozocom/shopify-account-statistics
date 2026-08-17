@@ -814,15 +814,26 @@
                 const discountAmount = typeof item === 'object' && item !== null ? parseFloat(item.discountAmount || 0) : 0;
                 const date = typeof item === 'object' && item !== null ? item.date : null;
                 const discountCode = typeof item === 'object' && item !== null ? item.discountCode : null;
+                const paymentMethod = typeof item === 'object' && item !== null ? item.paymentMethod : null;
+                const note = typeof item === 'object' && item !== null ? item.note : null;
+                const items = typeof item === 'object' && item !== null ? item.items : null;
+                const gid = typeof item === 'object' && item !== null ? item.gid : null;
+                const detailFetched = typeof item === 'object' && item !== null ? (item.detailFetched || false) : false;
+                const syncAttempts = typeof item === 'object' && item !== null ? (item.syncAttempts || 0) : 0;
 
                 if (!isNaN(price)) {
                     if (!cleaned[cleanKey]) {
-                        cleaned[cleanKey] = { price, priceBeforeDiscounts, discountAmount, date, discountCode };
+                        cleaned[cleanKey] = { price, priceBeforeDiscounts, discountAmount, date, discountCode, paymentMethod, note, items, gid, detailFetched, syncAttempts };
                     } else {
                         if (!cleaned[cleanKey].date && date) cleaned[cleanKey].date = date;
                         if (!cleaned[cleanKey].discountCode && discountCode) cleaned[cleanKey].discountCode = discountCode;
                         if (!cleaned[cleanKey].priceBeforeDiscounts && priceBeforeDiscounts) cleaned[cleanKey].priceBeforeDiscounts = priceBeforeDiscounts;
                         if (!cleaned[cleanKey].discountAmount && discountAmount) cleaned[cleanKey].discountAmount = discountAmount;
+                        if (!cleaned[cleanKey].paymentMethod && paymentMethod) cleaned[cleanKey].paymentMethod = paymentMethod;
+                        if (!cleaned[cleanKey].note && note) cleaned[cleanKey].note = note;
+                        if (!cleaned[cleanKey].items && items) cleaned[cleanKey].items = items;
+                        if (!cleaned[cleanKey].gid && gid) cleaned[cleanKey].gid = gid;
+                        if (detailFetched) cleaned[cleanKey].detailFetched = true;
                     }
                 }
             }
@@ -957,6 +968,48 @@
         return Object.values(map).sort((a, b) => b.quantity - a.quantity);
     }
 
+    function extractPaymentMethodFromObj(obj) {
+        if (!obj || typeof obj !== 'object') return null;
+
+        const transactions = obj.transactions || obj.paymentCollections?.nodes?.[0]?.transactions || obj.data?.order?.transactions;
+        if (Array.isArray(transactions) && transactions.length > 0) {
+            for (const tx of transactions) {
+                if (!tx || typeof tx !== 'object') continue;
+
+                let brandOrLast4 = '';
+                const details = tx.paymentDetails;
+                if (details) {
+                    if (details.cardBrand && details.last4) {
+                        brandOrLast4 = `${details.cardBrand} •••• ${details.last4}`;
+                    } else if (details.cardBrand) {
+                        brandOrLast4 = details.cardBrand;
+                    } else if (details.last4) {
+                        brandOrLast4 = `•••• ${details.last4}`;
+                    } else if (details.paymentMethodName) {
+                        return details.paymentMethodName;
+                    }
+                }
+
+                if (tx.typeDetails?.name) {
+                    const name = tx.typeDetails.name.trim();
+                    return brandOrLast4 ? `${name} (${brandOrLast4})` : name;
+                }
+                if (brandOrLast4) return brandOrLast4;
+                if (tx.gateway) return tx.gateway;
+                if (tx.type) return tx.type;
+            }
+        }
+
+        if (obj.paymentMethodName && typeof obj.paymentMethodName === 'string') return obj.paymentMethodName;
+        if (obj.paymentMethod) {
+            if (typeof obj.paymentMethod === 'string') return obj.paymentMethod;
+            if (typeof obj.paymentMethod === 'object' && obj.paymentMethod.name) return obj.paymentMethod.name;
+        }
+        if (obj.gateway && typeof obj.gateway === 'string') return obj.gateway;
+
+        return null;
+    }
+
     function extractOrdersFromObj(obj, uniqueOrders, isDetailResponse = false) {
         if (!obj || typeof obj !== 'object') return false;
         let updated = false;
@@ -998,39 +1051,6 @@
 
             const extractedItems = extractLineItemsFromObj(obj);
             const combinedItems = (extractedItems.length > 0) ? extractedItems : (existing.items || null);
-
-    function extractPaymentMethodFromObj(obj) {
-        if (!obj || typeof obj !== 'object') return null;
-
-        const transactions = obj.transactions || obj.paymentCollections?.nodes?.[0]?.transactions || obj.data?.order?.transactions;
-        if (Array.isArray(transactions) && transactions.length > 0) {
-            for (const tx of transactions) {
-                if (tx?.typeDetails?.name) {
-                    let name = tx.typeDetails.name;
-                    const details = tx.paymentDetails;
-                    if (details?.cardBrand) {
-                        name += ` (${details.cardBrand} •••• ${details.last4 || ''})`;
-                    }
-                    return name.trim();
-                }
-                if (tx?.paymentDetails?.paymentMethodName) {
-                    return tx.paymentDetails.paymentMethodName;
-                }
-                if (tx?.paymentDetails?.cardBrand) {
-                    return `${tx.paymentDetails.cardBrand} •••• ${tx.paymentDetails.last4 || ''}`;
-                }
-                if (tx?.type) {
-                    return tx.type;
-                }
-            }
-        }
-
-        if (obj.paymentMethodName) return obj.paymentMethodName;
-        if (obj.paymentMethod) return typeof obj.paymentMethod === 'string' ? obj.paymentMethod : obj.paymentMethod.name;
-        if (obj.gateway) return obj.gateway;
-
-        return null;
-    }
 
             let extractedNote = obj.note || obj.customerNote || null;
             if (!extractedNote && Array.isArray(obj.customAttributes) && obj.customAttributes.length > 0) {
