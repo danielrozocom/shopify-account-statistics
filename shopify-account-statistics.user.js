@@ -119,9 +119,9 @@
     }
 
     function attachPanelToDOM(panel) {
-        const mainOrdersSection = document.querySelector('[data-inspector-id="orderListSection"]') || 
-                                  document.querySelector('article')?.parentNode || 
-                                  document.querySelector('main');
+        const mainOrdersSection = document.querySelector('[data-inspector-id="orderListSection"]') ||
+            document.querySelector('article')?.parentNode ||
+            document.querySelector('main');
 
         if (mainOrdersSection && document.body.contains(mainOrdersSection)) {
             if (panel.parentNode !== mainOrdersSection || panel !== mainOrdersSection.firstChild) {
@@ -157,8 +157,9 @@
                 gap: 16px;
                 box-shadow: 0 4px 12px rgba(0,0,0,0.08);
                 width: 100%;
-                flex-basis: 100%;
-                grid-column: 1 / -1;
+                max-width: 950px;
+                margin-left: auto;
+                margin-right: auto;
                 box-sizing: border-box;
                 z-index: 999;
             `;
@@ -467,12 +468,10 @@
     function extractOrderIdFromArticle(article) {
         if (!article) return null;
 
-        // 1. Probar atributos oficiales de id de orden en Shopify (aria-labelledby / h2.id)
         const ariaLabel = article.getAttribute('aria-labelledby') || article.querySelector('h2')?.id || '';
         let match = ariaLabel.match(/(#[A-Za-z0-9\-_]+)/);
         if (match) return match[1].trim();
 
-        // 2. Probar coincidencia en el texto del artículo
         const textContent = article.textContent || '';
         match = textContent.match(/(#[A-Za-z0-9\-_]+)/);
         if (match) return match[1].trim();
@@ -487,48 +486,32 @@
         articles.forEach(article => {
             const orderId = extractOrderIdFromArticle(article);
             if (orderId && ordersMap[orderId] && ordersMap[orderId].date) {
-                let existingBadge = article.querySelector('.shopify-order-date-badge');
                 const formattedDate = formatOrderDate(ordersMap[orderId].date);
 
-                if (existingBadge) {
-                    if (existingBadge.textContent !== `📅 ${formattedDate}`) {
-                        existingBadge.textContent = `📅 ${formattedDate}`;
-                    }
-                } else {
-                    const badge = document.createElement('div');
-                    badge.className = 'shopify-order-date-badge';
-                    badge.style.cssText = `
-                        font-size: 11px;
-                        color: #5c4275;
-                        background: #f4ecfb;
-                        border: 1px solid #d8c3ed;
-                        padding: 3px 8px;
-                        border-radius: 6px;
-                        display: inline-block;
-                        margin-top: 6px;
-                        margin-bottom: 4px;
-                        font-weight: 600;
-                    `;
-                    badge.textContent = `📅 ${formattedDate}`;
+                const allSpans = Array.from(article.querySelectorAll('span, p, div'));
+                const subEl = allSpans.find(el => {
+                    const text = el.textContent || '';
+                    return text.includes(orderId) && (text.includes('COP') || text.includes('$'));
+                });
 
-                    // Insertar directamente debajo del subtítulo del ID de la orden (#CJ... · $... COP)
-                    const subElements = Array.from(article.querySelectorAll('span, p, div'));
-                    const subSpan = subElements.find(el => (el.textContent || '').includes(orderId));
-
-                    if (subSpan) {
-                        const targetDiv = subSpan.closest('div');
-                        if (targetDiv && targetDiv.parentNode) {
-                            targetDiv.parentNode.insertBefore(badge, targetDiv.nextSibling);
-                        } else {
-                            subSpan.parentNode.appendChild(badge);
+                if (subEl) {
+                    let existingBadge = subEl.querySelector('.shopify-order-date-badge');
+                    if (existingBadge) {
+                        if (existingBadge.textContent !== ` · 📅 ${formattedDate}`) {
+                            existingBadge.textContent = ` · 📅 ${formattedDate}`;
                         }
                     } else {
-                        const headingDiv = article.querySelector('h2, h3')?.closest('div');
-                        if (headingDiv && headingDiv.parentNode) {
-                            headingDiv.parentNode.insertBefore(badge, headingDiv.nextSibling);
-                        } else {
-                            article.insertBefore(badge, article.firstChild);
-                        }
+                        const badge = document.createElement('span');
+                        badge.className = 'shopify-order-date-badge';
+                        badge.style.cssText = `
+                            font-size: 0.95em;
+                            color: #6b5087;
+                            font-weight: 600;
+                            margin-left: 4px;
+                            display: inline;
+                        `;
+                        badge.textContent = ` · 📅 ${formattedDate}`;
+                        subEl.appendChild(badge);
                     }
                 }
             }
@@ -630,12 +613,40 @@
     function updateDashboard() {
         scanDOMOrders();
 
-        const pagBtn = getPaginationButton();
-        if (pagBtn) {
-            hasMorePagesDetected = true;
+        const ordersMap = getStoredOrders();
+        const totalAllOrders = Object.keys(ordersMap).length;
+
+        // Validar si el pedido más reciente del DOM ya está en la memoria local (localStorage)
+        const articles = document.querySelectorAll('article');
+        let newestDomOrderId = null;
+        if (articles.length > 0) {
+            newestDomOrderId = extractOrderIdFromArticle(articles[0]);
         }
 
-        const ordersMap = getStoredOrders();
+        const isNewestInCache = newestDomOrderId && ordersMap[newestDomOrderId];
+        const pagBtn = getPaginationButton();
+
+        let statusLabel = '✅ Sincronizado';
+        let statusBgColor = '#2e7d32'; // verde
+
+        if (isAutoLoadingAll) {
+            statusLabel = '🔄 Sincronizando...';
+            statusBgColor = '#0288d1'; // azul
+        } else if (currentFilterMode !== 'all') {
+            const filteredIds = filterOrdersByDate(ordersMap);
+            statusLabel = `🔍 Filtrando (${filteredIds.length} de ${totalAllOrders})`;
+            statusBgColor = '#7b1fa2'; // morado
+        } else if (totalAllOrders === 0) {
+            statusLabel = '🔄 Sincronizando...';
+            statusBgColor = '#0288d1';
+        } else if (!isNewestInCache && pagBtn) {
+            statusLabel = '⚠️ Sincronización parcial';
+            statusBgColor = '#e65100';
+        } else {
+            statusLabel = '✅ Sincronizado';
+            statusBgColor = '#2e7d32';
+        }
+
         const filteredIds = filterOrdersByDate(ordersMap);
         const orderCount = filteredIds.length;
 
@@ -647,21 +658,6 @@
         });
 
         const average = orderCount > 0 ? totalSpent / orderCount : 0;
-        const totalAllOrders = Object.keys(ordersMap).length;
-
-        let statusLabel = '✅ Sincronizado';
-        let statusBgColor = '#2e7d32'; // verde
-
-        if (isAutoLoadingAll) {
-            statusLabel = '🔄 Cargando todos los pedidos...';
-            statusBgColor = '#0288d1'; // azul
-        } else if (currentFilterMode !== 'all') {
-            statusLabel = `🔍 Filtrando (${orderCount} de ${totalAllOrders})`;
-            statusBgColor = '#7b1fa2'; // morado
-        } else if (hasMorePagesDetected) {
-            statusLabel = '⚠️ Sincronización parcial (falta cargar)';
-            statusBgColor = '#e65100'; // naranja
-        }
 
         renderPanel(orderCount, formatCurrency(totalSpent), formatCurrency(average), statusLabel, statusBgColor, false);
         injectDatesIntoDOM();
