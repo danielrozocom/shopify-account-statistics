@@ -125,7 +125,7 @@
         syncMissingOrderDetails();
     }
 
-    function scrollToOrder(position) {
+    async function scrollToOrder(position) {
         if (position === 'first') {
             const articles = document.querySelectorAll('article');
             if (articles.length > 0) {
@@ -134,6 +134,11 @@
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             }
         } else if (position === 'last') {
+            const pagBtn = getPaginationButton();
+            if (pagBtn) {
+                await loadAllOrders();
+            }
+
             const articles = document.querySelectorAll('article');
             if (articles.length > 0) {
                 articles[articles.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -392,6 +397,12 @@
                     }
                     saveStoredOrders(currentOrders);
                     updateDashboard();
+
+                    const pagBtn = getPaginationButton();
+                    if (pagBtn) {
+                        await loadAllOrders();
+                    }
+
                     await syncMissingOrderDetails();
                 };
             }
