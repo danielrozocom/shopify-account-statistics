@@ -910,38 +910,66 @@
 
                 let fetchedSuccess = false;
 
-                // Estrategia 1 (PRIMARIA): GraphQL OrderDetails POST con token Authorization
+                // Estrategia 1 (PRIMARIA - NATIVA IDENTICA AL CLIC MANUAL): Remix Data Loader GET Route
                 try {
-                    const resp = await targetWindow.fetch(graphqlUrl + '?operation=OrderDetails', {
-                        method: 'POST',
+                    const resp = await targetWindow.fetch(remixUrl, {
+                        method: 'GET',
                         credentials: 'include',
-                        headers: defaultReqHeaders,
-                        body: JSON.stringify({
-                            operationName: 'OrderDetails',
-                            variables: {
-                                orderId: item.gid
-                            },
-                            query: ORDER_DETAILS_QUERY
-                        })
+                        headers: { 'Accept': 'application/json, text/plain, */*' }
                     });
 
                     if (resp.status === 429) {
-                        await new Promise(r => setTimeout(r, 2000));
+                        await new Promise(r => setTimeout(r, 1500));
                     } else if (resp.ok) {
                         const resJson = await resp.json();
-                        if (resJson?.data?.order && !resJson.data.order.name) {
-                            resJson.data.order.name = item.name;
+                        if (resJson?.order && !resJson.order.name) {
+                            resJson.order.name = item.name;
                         }
                         let currentOrders = getStoredOrders();
                         if (extractOrdersFromObj(resJson, currentOrders, true)) {
                             if (currentOrders[item.name]) currentOrders[item.name].detailFetched = true;
                             saveStoredOrders(currentOrders);
                             fetchedSuccess = true;
+                            logAnalytics('✅ [Remix Loader] Sincronización nativa exitosa para:', item.name);
                         }
                     }
                 } catch (e1) { }
 
-                // Estrategia 2 (SECUNDARIA): GraphQL LineItems POST con token Authorization
+                // Estrategia 2 (SECUNDARIA): GraphQL OrderDetails POST con token Authorization
+                if (!fetchedSuccess) {
+                    try {
+                        const resp = await targetWindow.fetch(graphqlUrl + '?operation=OrderDetails', {
+                            method: 'POST',
+                            credentials: 'include',
+                            headers: defaultReqHeaders,
+                            body: JSON.stringify({
+                                operationName: 'OrderDetails',
+                                variables: {
+                                    orderId: item.gid
+                                },
+                                query: ORDER_DETAILS_QUERY
+                            })
+                        });
+
+                        if (resp.status === 429) {
+                            await new Promise(r => setTimeout(r, 1500));
+                        } else if (resp.ok) {
+                            const resJson = await resp.json();
+                            if (resJson?.data?.order && !resJson.data.order.name) {
+                                resJson.data.order.name = item.name;
+                            }
+                            let currentOrders = getStoredOrders();
+                            if (extractOrdersFromObj(resJson, currentOrders, true)) {
+                                if (currentOrders[item.name]) currentOrders[item.name].detailFetched = true;
+                                saveStoredOrders(currentOrders);
+                                fetchedSuccess = true;
+                                logAnalytics('✅ [GraphQL OrderDetails] Sincronización exitosa para:', item.name);
+                            }
+                        }
+                    } catch (e2) { }
+                }
+
+                // Estrategia 3 (RESPALDO): GraphQL LineItems POST con token Authorization
                 if (!fetchedSuccess) {
                     try {
                         const resp = await targetWindow.fetch(graphqlUrl + '?operation=LineItems', {
@@ -959,7 +987,7 @@
                         });
 
                         if (resp.status === 429) {
-                            await new Promise(r => setTimeout(r, 2000));
+                            await new Promise(r => setTimeout(r, 1500));
                         } else if (resp.ok) {
                             const resJson = await resp.json();
                             if (resJson?.data?.order && !resJson.data.order.name) {
@@ -970,32 +998,7 @@
                                 if (currentOrders[item.name]) currentOrders[item.name].detailFetched = true;
                                 saveStoredOrders(currentOrders);
                                 fetchedSuccess = true;
-                            }
-                        }
-                    } catch (e2) { }
-                }
-
-                // Estrategia 3 (RESPALDO): Remix Data Loader GET
-                if (!fetchedSuccess) {
-                    try {
-                        const resp = await targetWindow.fetch(remixUrl, {
-                            method: 'GET',
-                            credentials: 'include',
-                            headers: { 'Accept': 'application/json, text/plain, */*' }
-                        });
-
-                        if (resp.status === 429) {
-                            await new Promise(r => setTimeout(r, 2000));
-                        } else if (resp.ok) {
-                            const resJson = await resp.json();
-                            if (resJson?.order && !resJson.order.name) {
-                                resJson.order.name = item.name;
-                            }
-                            let currentOrders = getStoredOrders();
-                            if (extractOrdersFromObj(resJson, currentOrders, true)) {
-                                if (currentOrders[item.name]) currentOrders[item.name].detailFetched = true;
-                                saveStoredOrders(currentOrders);
-                                fetchedSuccess = true;
+                                logAnalytics('✅ [GraphQL LineItems] Sincronización exitosa para:', item.name);
                             }
                         }
                     } catch (e3) { }
