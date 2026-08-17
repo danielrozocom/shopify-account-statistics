@@ -75,17 +75,17 @@
         updateDashboard();
 
         let count = 0;
-        const maxAttempts = 50;
+        const maxAttempts = 100;
 
         while (count < maxAttempts) {
             const loadBtn = getPaginationButton();
             if (!loadBtn) break;
 
-            loadBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // Cargar en segundo plano sin forzar scroll visual en cada paso
             loadBtn.click();
             count++;
 
-            await new Promise(resolve => setTimeout(resolve, 1200));
+            await new Promise(resolve => setTimeout(resolve, 800));
         }
 
         isAutoLoadingAll = false;
@@ -103,8 +103,7 @@
         } else if (position === 'last') {
             const loadBtn = getPaginationButton();
             if (loadBtn) {
-                // Si aún quedan páginas por cargar, avisar o cargarlas
-                const confirmLoad = confirm('Aún hay más pedidos sin cargar. ¿Deseas cargar automáticamente todos los pedidos restantes para ir al último pedido absoluto?');
+                const confirmLoad = confirm('Aún hay más pedidos sin cargar. ¿Deseas cargar automáticamente todos los pedidos restantes en segundo plano para ir al pedido más antiguo?');
                 if (confirmLoad) {
                     await loadAllOrders();
                 }
@@ -178,10 +177,8 @@
             `;
         }
 
-        // Insertar siempre encima de los pedidos (first article / main orders container)
         attachPanelToDOM(panel);
 
-        // Si el usuario está interactuando con un control dentro del panel, actualizar solo los valores
         const isEditing = panel.contains(document.activeElement);
 
         if (isLoading && !panel.querySelector('#shopify-stat-count')) {
@@ -234,7 +231,6 @@
                     </div>
                 </div>
 
-                <!-- Controles de Filtros de Fecha y Navegación Rápida -->
                 <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center; justify-content: space-between; border-top: 1px solid #f0ecf4; padding-top: 12px;">
                     <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                         <span style="font-size: 12px; font-weight: 600; color: #4a3e56;">📅 Filtrar por fecha:</span>
@@ -254,16 +250,15 @@
 
                     <div style="display: flex; gap: 8px; align-items: center;">
                         <button id="shopify-btn-first-order-panel" style="padding: 6px 12px; border-radius: 20px; border: 1px solid ${themeColor}; background: #f8f5fb; color: #16081e; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px;">
-                            ⬆️ Primer pedido
+                            ⬆️ Pedido más reciente
                         </button>
                         <button id="shopify-btn-last-order-panel" style="padding: 6px 12px; border-radius: 20px; border: 1px solid ${themeColor}; background: #f8f5fb; color: #16081e; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px;">
-                            ⬇️ Último pedido
+                            ⬇️ Pedido más antiguo
                         </button>
                     </div>
                 </div>
             `;
 
-            // Event Listeners para Filtros
             const selectEl = document.getElementById('shopify-filter-mode-select');
             if (selectEl) {
                 selectEl.onchange = (e) => {
@@ -292,7 +287,6 @@
                 };
             }
 
-            // Event Listeners para botones del Panel
             const btnFirst = document.getElementById('shopify-btn-first-order-panel');
             if (btnFirst) btnFirst.onclick = () => scrollToOrder('first');
 
@@ -302,7 +296,6 @@
             const btnLoadAll = document.getElementById('shopify-btn-load-all');
             if (btnLoadAll) btnLoadAll.onclick = () => loadAllOrders();
         } else {
-            // Actualización suave de valores sin destruir el DOM
             const countEl = panel.querySelector('#shopify-stat-count');
             if (countEl) countEl.textContent = count;
 
@@ -339,7 +332,7 @@
 
         const btnTop = document.createElement('button');
         btnTop.id = 'shopify-scroll-top-btn';
-        btnTop.innerHTML = '⬆️ Primer pedido';
+        btnTop.innerHTML = '⬆️ Pedido más reciente';
         btnTop.style.cssText = `
             background: #ffffff;
             color: #16081e;
@@ -357,7 +350,7 @@
 
         const btnBottom = document.createElement('button');
         btnBottom.id = 'shopify-scroll-bottom-btn';
-        btnBottom.innerHTML = '⬇️ Último pedido';
+        btnBottom.innerHTML = '⬇️ Pedido más antiguo';
         btnBottom.style.cssText = `
             background: #ffffff;
             color: #16081e;
@@ -449,7 +442,6 @@
                     updated = true;
                 }
             }
-            // Evitar recursión profunda dentro de las propiedades internas de una orden ya identificada
             return updated;
         }
 
@@ -505,27 +497,28 @@
 
                 if (existingBadge) {
                     if (existingBadge.textContent !== `📅 ${formattedDate}`) {
-                        existingBadge.innerHTML = `📅 ${formattedDate}`;
+                        existingBadge.textContent = `📅 ${formattedDate}`;
                     }
                 } else {
                     const badge = document.createElement('div');
                     badge.className = 'shopify-order-date-badge';
                     badge.style.cssText = `
                         font-size: 11px;
-                        color: #70647a;
-                        background: #f8f5fb;
-                        border: 1px solid #e0d6eb;
-                        padding: 3px 8px;
+                        color: #5c4275;
+                        background: #f4ecfb;
+                        border: 1px solid #d8c3ed;
+                        padding: 4px 10px;
                         border-radius: 6px;
                         display: inline-block;
-                        margin-top: 6px;
+                        margin-top: 8px;
+                        margin-bottom: 4px;
                         font-weight: 600;
                     `;
-                    badge.innerHTML = `📅 ${formattedDate}`;
+                    badge.textContent = `📅 ${formattedDate}`;
 
-                    const heading = article.querySelector('h2, h3, header, strong');
-                    if (heading) {
-                        heading.parentNode.appendChild(badge);
+                    const headingDiv = article.querySelector('h2, h3, header, strong')?.closest('div');
+                    if (headingDiv) {
+                        headingDiv.parentNode.insertBefore(badge, headingDiv.nextSibling);
                     } else {
                         article.insertBefore(badge, article.firstChild);
                     }
@@ -600,14 +593,10 @@
         return orderIds.filter(id => {
             const order = ordersMap[id];
             if (currentFilterMode === 'all') return true;
-            if (!order) return false;
-
-            if (!order.date) {
-                return true;
-            }
+            if (!order || !order.date) return false;
 
             const orderDate = new Date(order.date);
-            if (isNaN(orderDate.getTime())) return true;
+            if (isNaN(orderDate.getTime())) return false;
 
             if (currentFilterMode === 'month') {
                 return orderDate.getMonth() === now.getMonth() && orderDate.getFullYear() === now.getFullYear();
