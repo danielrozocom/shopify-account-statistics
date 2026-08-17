@@ -647,7 +647,8 @@
                 date: date || existing.date || null,
                 discountCode: discountCode || existing.discountCode || null,
                 gid: gid || existing.gid || null,
-                detailFetched: hasDetailInfo ? true : (existing.detailFetched || false)
+                detailFetched: hasDetailInfo ? true : (existing.detailFetched || false),
+                verifiedNoDiscount: isDetailResponse ? true : (existing.verifiedNoDiscount || false)
             };
             updated = true;
             return updated;
@@ -714,8 +715,12 @@
         const pendingList = [];
         for (const key of orderKeys) {
             const order = ordersMap[key];
-            if (order.gid && !order.detailFetched) {
-                pendingList.push({ name: key, gid: order.gid });
+            const numericMatch = key.match(/\d+/);
+            const gid = order.gid || (numericMatch ? `gid://shopify/Order/${numericMatch[0]}` : null);
+            const isFullyVerified = order.detailFetched && (order.discountCode || order.verifiedNoDiscount);
+
+            if (gid && !isFullyVerified) {
+                pendingList.push({ name: key, gid: gid });
             }
         }
 
