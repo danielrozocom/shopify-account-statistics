@@ -15,6 +15,8 @@
     let currentFilterMode = 'all'; // 'all', 'month', 'year', 'custom'
     let customStartDate = '';
     let customEndDate = '';
+    let isAutoLoadingAll = false;
+    let hasMorePagesDetected = false;
 
     function formatCurrency(amount) {
         return new Intl.NumberFormat('es-CO', {
@@ -56,21 +58,68 @@
         return 'rgb(192, 159, 219)';
     }
 
-    function scrollToOrder(position) {
-        const articles = document.querySelectorAll('article');
-        if (articles.length > 0) {
-            const target = position === 'first' ? articles[0] : articles[articles.length - 1];
-            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        } else {
-            if (position === 'first') {
+    function getPaginationButton() {
+        const candidates = document.querySelectorAll('button, a');
+        for (const btn of candidates) {
+            const text = (btn.textContent || '').toLowerCase().trim();
+            if (text.includes('cargar más') || text.includes('ver más') || text.includes('mostrar más') || text.includes('show more') || text.includes('load more') || text.includes('siguiente')) {
+                return btn;
+            }
+        }
+        return null;
+    }
+
+    async function loadAllOrders() {
+        if (isAutoLoadingAll) return;
+        isAutoLoadingAll = true;
+        updateDashboard();
+
+        let count = 0;
+        const maxAttempts = 50;
+
+        while (count < maxAttempts) {
+            const loadBtn = getPaginationButton();
+            if (!loadBtn) break;
+
+            loadBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            loadBtn.click();
+            count++;
+
+            await new Promise(resolve => setTimeout(resolve, 1200));
+        }
+
+        isAutoLoadingAll = false;
+        updateDashboard();
+    }
+
+    async function scrollToOrder(position) {
+        if (position === 'first') {
+            const articles = document.querySelectorAll('article');
+            if (articles.length > 0) {
+                articles[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else {
                 window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        } else if (position === 'last') {
+            const loadBtn = getPaginationButton();
+            if (loadBtn) {
+                // Si aún quedan páginas por cargar, avisar o cargarlas
+                const confirmLoad = confirm('Aún hay más pedidos sin cargar. ¿Deseas cargar automáticamente todos los pedidos restantes para ir al último pedido absoluto?');
+                if (confirmLoad) {
+                    await loadAllOrders();
+                }
+            }
+
+            const articles = document.querySelectorAll('article');
+            if (articles.length > 0) {
+                articles[articles.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
             } else {
                 window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
             }
         }
     }
 
-    function renderPanel(count, total, avg, statusText, isLoading = false) {
+    function renderPanel(count, total, avg, statusText, statusBgColor = null, isLoading = false) {
         const headerContainer = document.querySelector('._17kya4u18._1fragem120._1fragem5u._1fragemws') || document.querySelector('h1');
         if (!headerContainer) return false;
 
@@ -99,6 +148,8 @@
             `;
             headerContainer.parentNode.insertBefore(panel, headerContainer.nextSibling);
         }
+
+        const badgeColor = statusBgColor || themeColor;
 
         if (isLoading) {
             panel.innerHTML = `
@@ -139,7 +190,14 @@
                     </div>
                     
                     <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                        <span style="font-size: 10px; background: ${themeColor}; color: #fff; padding: 4px 8px; border-radius: 6px; font-weight: 600;">${statusText}</span>
+                        <span style="font-size: 11px; background: ${badgeColor}; color: #fff; padding: 5px 10px; border-radius: 6px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
+                            ${statusText}
+                        </span>
+                        ${hasMorePagesDetected && !isAutoLoadingAll ? `
+                            <button id="shopify-btn-load-all" style="padding: 5px 10px; border-radius: 6px; border: 1px solid ${themeColor}; background: #ffffff; color: #16081e; font-size: 11px; font-weight: 600; cursor: pointer;">
+                                🔄 Cargar todos
+                            </button>
+                        ` : ''}
                     </div>
                 </div>
 
@@ -207,6 +265,9 @@
 
             const btnLast = document.getElementById('shopify-btn-last-order-panel');
             if (btnLast) btnLast.onclick = () => scrollToOrder('last');
+
+            const btnLoadAll = document.getElementById('shopify-btn-load-all');
+            if (btnLoadAll) btnLoadAll.onclick = () => loadAllOrders();
         }
         return true;
     }
@@ -286,6 +347,10 @@
     function extractOrdersFromObj(obj, uniqueOrders) {
         if (!obj || typeof obj !== 'object') return false;
         let updated = false;
+
+        if (obj.pageInfo && typeof obj.pageInfo.hasNextPage === 'boolean') {
+            hasMorePagesDetected = obj.pageInfo.hasNextPage;
+        }
 
         if (Array.isArray(obj)) {
             obj.forEach(item => {
@@ -390,7 +455,6 @@
             const orderMatch = textContent.match(/(#[A-Za-z0-9\-_]+)/);
             const priceMatch = textContent.match(/\$\s*([\d\.,]+)\s*COP/) || textContent.match(/([\d\.,]+)\s*COP/);
 
-            // Intentar obtener la fecha del DOM (<time datetime="..."> o texto de fecha)
             const timeEl = article.querySelector('time');
             let extractedDate = null;
             if (timeEl) {
@@ -431,7 +495,6 @@
             if (!order) return false;
 
             if (!order.date) {
-                // Si la fecha aún no se ha obtenido, se incluye por defecto
                 return true;
             }
 
@@ -461,6 +524,12 @@
 
     function updateDashboard() {
         scanDOMOrders();
+
+        const pagBtn = getPaginationButton();
+        if (pagBtn) {
+            hasMorePagesDetected = true;
+        }
+
         const ordersMap = getStoredOrders();
         const filteredIds = filterOrdersByDate(ordersMap);
         const orderCount = filteredIds.length;
@@ -474,16 +543,29 @@
 
         const average = orderCount > 0 ? totalSpent / orderCount : 0;
         const totalAllOrders = Object.keys(ordersMap).length;
-        const statusLabel = currentFilterMode !== 'all' ? `Filtrando (${orderCount} de ${totalAllOrders})` : 'Sincronizado';
 
-        renderPanel(orderCount, formatCurrency(totalSpent), formatCurrency(average), statusLabel, false);
+        let statusLabel = '✅ Sincronizado';
+        let statusBgColor = '#2e7d32'; // verde
+
+        if (isAutoLoadingAll) {
+            statusLabel = '🔄 Cargando todos los pedidos...';
+            statusBgColor = '#0288d1'; // azul
+        } else if (currentFilterMode !== 'all') {
+            statusLabel = `🔍 Filtrando (${orderCount} de ${totalAllOrders})`;
+            statusBgColor = '#7b1fa2'; // morado
+        } else if (hasMorePagesDetected) {
+            statusLabel = '⚠️ Sincronización parcial (falta cargar)';
+            statusBgColor = '#e65100'; // naranja
+        }
+
+        renderPanel(orderCount, formatCurrency(totalSpent), formatCurrency(average), statusLabel, statusBgColor, false);
         injectDatesIntoDOM();
     }
 
     setupFetchInterceptor();
 
     window.addEventListener('load', () => {
-        renderPanel(0, "$ 0,00", "$ 0,00", "Cargando...", true);
+        renderPanel(0, "$ 0,00", "$ 0,00", "Cargando...", null, true);
 
         const cached = getStoredOrders();
         const ids = Object.keys(cached);
@@ -492,7 +574,7 @@
             ids.forEach(id => {
                 total += (typeof cached[id] === 'object' ? cached[id].price : cached[id]);
             });
-            renderPanel(ids.length, formatCurrency(total), formatCurrency(total / ids.length), "Caché Local", false);
+            renderPanel(ids.length, formatCurrency(total), formatCurrency(total / ids.length), "Caché Local", null, false);
             injectDatesIntoDOM();
         }
 
