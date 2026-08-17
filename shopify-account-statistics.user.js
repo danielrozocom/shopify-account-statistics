@@ -104,11 +104,8 @@
             }
         } else if (position === 'last') {
             const loadBtn = getPaginationButton();
-            if (loadBtn && !isFullySynced) {
-                const confirmLoad = confirm('Aún hay más pedidos sin cargar. ¿Deseas cargar automáticamente todos los pedidos restantes en segundo plano para ir al pedido más antiguo?');
-                if (confirmLoad) {
-                    await loadAllOrders();
-                }
+            if (loadBtn) {
+                await loadAllOrders();
             }
 
             const articles = document.querySelectorAll('article');
