@@ -872,7 +872,7 @@
         const basePath = window.location.pathname.split('/account')[0];
         const graphqlUrl = window.location.origin + basePath + '/account/customer/api/unstable/graphql';
 
-        const authHeader = capturedAuthToken || sessionStorage.getItem('shopify_auth_token');
+        const authHeader = findAuthTokenInPage();
         const defaultReqHeaders = {
             'Content-Type': 'application/json',
             'Accept': 'application/json'
@@ -1006,6 +1006,42 @@
 
     let capturedAuthToken = null;
 
+    function findAuthTokenInPage() {
+        if (capturedAuthToken) return capturedAuthToken;
+        try {
+            const stored = sessionStorage.getItem('shopify_auth_token') || localStorage.getItem('shopify_auth_token');
+            if (stored) {
+                capturedAuthToken = stored;
+                return stored;
+            }
+
+            for (let i = 0; i < sessionStorage.length; i++) {
+                const val = sessionStorage.getItem(sessionStorage.key(i));
+                if (val && val.includes('shcat_')) {
+                    const match = val.match(/(shcat_[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+)/);
+                    if (match) {
+                        capturedAuthToken = match[1];
+                        sessionStorage.setItem('shopify_auth_token', match[1]);
+                        return match[1];
+                    }
+                }
+            }
+            for (let i = 0; i < localStorage.length; i++) {
+                const val = localStorage.getItem(localStorage.key(i));
+                if (val && val.includes('shcat_')) {
+                    const match = val.match(/(shcat_[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+)/);
+                    if (match) {
+                        capturedAuthToken = match[1];
+                        sessionStorage.setItem('shopify_auth_token', match[1]);
+                        return match[1];
+                    }
+                }
+            }
+        } catch (e) { }
+
+        return null;
+    }
+
     function captureAuthTokenFromHeaders(headers) {
         if (!headers) return;
         try {
@@ -1029,17 +1065,33 @@
 
     function setupFetchInterceptor() {
         const targetWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
-        const originalFetch = targetWindow.fetch;
 
+        try {
+            const originalXHRSetHeader = targetWindow.XMLHttpRequest.prototype.setRequestHeader;
+            targetWindow.XMLHttpRequest.prototype.setRequestHeader = function (header, value) {
+                if (header && typeof header === 'string' && header.toLowerCase() === 'authorization' && value && value.includes('shcat_')) {
+                    capturedAuthToken = value;
+                    sessionStorage.setItem('shopify_auth_token', value);
+                }
+                return originalXHRSetHeader.apply(this, arguments);
+            };
+        } catch (ex) { }
+
+        const originalFetch = targetWindow.fetch;
         targetWindow.fetch = async function (...args) {
+            const firstArg = args[0];
             const options = args[1];
+
+            if (firstArg && typeof firstArg === 'object' && firstArg.headers) {
+                captureAuthTokenFromHeaders(firstArg.headers);
+            }
             if (options && options.headers) {
                 captureAuthTokenFromHeaders(options.headers);
             }
 
             const response = await originalFetch.apply(this, args);
             try {
-                let requestUrl = (typeof args[0] === 'string') ? args[0] : (args[0]?.url || '');
+                let requestUrl = (typeof firstArg === 'string') ? firstArg : (firstArg?.url || '');
                 if (requestUrl.includes('graphql') || requestUrl.includes('/account') || requestUrl.includes('/api')) {
                     const clone = response.clone();
                     clone.json().then(res => {
