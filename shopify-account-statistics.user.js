@@ -312,19 +312,18 @@
 
                 const imgHtml = p.imageUrl ? `<img src="${p.imageUrl}" style="width: 36px; height: 36px; object-fit: cover; border-radius: 6px; border: 1px solid #e2d8ee;">` : `<div style="width: 36px; height: 36px; background: #f0ecf4; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px;">🛍️</div>`;
 
-                const historyTooltip = buildProductHistoryTooltip(p).replace(/"/g, '&quot;');
                 let priceHistoryHtml = '';
                 if (p.hasPriceVariation) {
                     priceHistoryHtml = `
-                        <span style="font-size: 11px; background: #fff3dc; color: #b45309; border: 1px solid #fef3c7; padding: 2px 6px; border-radius: 6px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; cursor: help;" title="${historyTooltip}">
+                        <span style="font-size: 11px; background: #fff3dc; color: #b45309; border: 1px solid #fef3c7; padding: 2px 6px; border-radius: 6px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
                             📈 ${formatCurrency(p.minPrice)} - ${formatCurrency(p.maxPrice)}
                         </span>
-                        ${p.dateRangeStr ? `<span style="font-size: 10px; color: #70647a; display: block; margin-top: 2px; cursor: help;" title="${historyTooltip}">📅 ${p.dateRangeStr}</span>` : ''}
+                        ${p.dateRangeStr ? `<span style="font-size: 10px; color: #70647a; display: block; margin-top: 2px;">📅 ${p.dateRangeStr}</span>` : ''}
                     `;
                 } else if (p.minPrice > 0) {
                     priceHistoryHtml = `
-                        <span style="font-size: 11px; color: #4a3e56; font-weight: 500; cursor: help;" title="${historyTooltip}">${formatCurrency(p.minPrice)} / und.</span>
-                        ${p.dateRangeStr ? `<span style="font-size: 10px; color: #70647a; display: block; margin-top: 2px; cursor: help;" title="${historyTooltip}">📅 ${p.dateRangeStr}</span>` : ''}
+                        <span style="font-size: 11px; color: #4a3e56; font-weight: 500;">${formatCurrency(p.minPrice)} / und.</span>
+                        ${p.dateRangeStr ? `<span style="font-size: 10px; color: #70647a; display: block; margin-top: 2px;">📅 ${p.dateRangeStr}</span>` : ''}
                     `;
                 } else {
                     priceHistoryHtml = `<span style="font-size: 11px; color: #70647a;">-</span>`;
@@ -354,20 +353,77 @@
                     }
                 }
 
+                const historyRowId = `shopify-history-row-${idx}`;
+                let historySubRowHtml = '';
+                if (Array.isArray(p.history) && p.history.length > 0) {
+                    const timelineCardsHtml = p.history.map((h, hIdx) => {
+                        const dateFormatted = formatDateShort(h.date) || 'Sin fecha';
+                        const paidStr = formatCurrency(h.unitPricePaid);
+                        const hasDiscount = h.unitPriceGross && h.unitPriceGross > (h.unitPricePaid + 1);
+                        const grossStr = hasDiscount ? formatCurrency(h.unitPriceGross) : paidStr;
+                        const savedStr = hasDiscount ? formatCurrency(h.unitPriceGross - h.unitPricePaid) : null;
+
+                        return `
+                            <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; background: #ffffff; border: 1px solid #e9d5ff; border-radius: 8px; font-size: 11px; margin-bottom: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <span style="font-weight: 700; color: #9333ea; background: #f3e8ff; padding: 2px 8px; border-radius: 6px; font-size: 11px;">${h.orderName}</span>
+                                    <span style="color: #70647a; font-weight: 500;">📅 ${dateFormatted}</span>
+                                    ${h.variantName && h.variantName !== 'Estándar' ? `<span style="color: #6b21a8; font-weight: 600; background: #faf5ff; border: 1px solid #f3e8ff; padding: 1px 6px; border-radius: 4px;">${h.variantName}</span>` : ''}
+                                </div>
+                                <div style="text-align: right; display: flex; align-items: center; gap: 10px;">
+                                    <div>
+                                        <span style="font-weight: 700; color: #2e7d32; font-size: 12px;">Pagado: ${paidStr}/und.</span>
+                                        ${hasDiscount ? `<span style="color: #70647a; font-size: 10px; text-decoration: line-through; margin-left: 6px;">${grossStr}</span>` : ''}
+                                    </div>
+                                    ${savedStr ? `<span style="background: #fef3c7; color: #b45309; border: 1px solid #fde68a; padding: 2px 8px; border-radius: 6px; font-weight: 600; font-size: 10px;">🎁 Ahorro ${savedStr} ${h.discountCode ? `(${h.discountCode})` : ''}</span>` : `<span style="color: #94a3b8; font-size: 10px;">(Sin descuento adicional)</span>`}
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+
+                    historySubRowHtml = `
+                        <tr id="${historyRowId}" style="display: none; background: #fdfbfe; border-bottom: 2px solid #e9d5ff;">
+                            <td colspan="5" style="padding: 12px 16px;">
+                                <div style="background: #ffffff; border: 1px solid #e2d8ee; border-radius: 12px; padding: 12px; box-shadow: 0 4px 12px rgba(147, 51, 234, 0.08);">
+                                    <div style="font-weight: 700; color: #7e22ce; font-size: 13px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f3e8ff; padding-bottom: 6px;">
+                                        <span>📜 Cronograma de Compras & Histórico de Precios — <strong style="color: #16081e;">${p.title}</strong></span>
+                                        <span style="font-size: 11px; color: #70647a; background: #f3e8ff; padding: 2px 8px; border-radius: 10px; font-weight: 600;">📅 Periodo Activo: ${p.dateRangeStr || 'Sin fecha'}</span>
+                                    </div>
+                                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                                        ${timelineCardsHtml}
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }
+
+                const toggleHistoryBtn = (p.history && p.history.length > 0) ? `
+                    <button class="shopify-toggle-history-btn" data-target="${historyRowId}" style="background: #f8f5fb; color: #9333ea; border: 1px solid #e2d8ee; padding: 3px 8px; border-radius: 12px; font-size: 10px; font-weight: 600; cursor: pointer; margin-top: 4px; display: inline-flex; align-items: center; gap: 4px; transition: all 0.2s ease;" onmouseover="this.style.background='#9333ea'; this.style.color='#ffffff';" onmouseout="this.style.background='#f8f5fb'; this.style.color='#9333ea';">
+                        📜 Histórico Cronológico (${p.history.length})
+                    </button>
+                ` : '';
+
                 top10RowsHtml += `
                     <tr style="border-bottom: 1px solid #f0ecf4;">
                         <td style="padding: 10px 12px; font-weight: 700; color: #9333ea; font-size: 13px;">#${idx + 1}</td>
-                        <td style="padding: 10px 12px; display: flex; align-items: center; gap: 10px;">
-                            ${imgHtml}
-                            <div>
-                                ${titleHtml}
-                                ${variantBadgeHtml ? `<br>${variantBadgeHtml}` : ''}
+                        <td style="padding: 10px 12px;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                ${imgHtml}
+                                <div>
+                                    ${titleHtml}
+                                    ${variantBadgeHtml ? `<br>${variantBadgeHtml}` : ''}
+                                </div>
                             </div>
                         </td>
                         <td style="padding: 10px 12px; text-align: center; font-weight: 700; color: #16081e; font-size: 13px;">${p.quantity} und.</td>
-                        <td style="padding: 10px 12px; text-align: center;">${priceHistoryHtml}</td>
+                        <td style="padding: 10px 12px; text-align: center;">
+                            ${priceHistoryHtml}
+                            ${toggleHistoryBtn ? `<br>${toggleHistoryBtn}` : ''}
+                        </td>
                         <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #2e7d32; font-size: 13px;">${formatCurrency(p.totalSpent)}</td>
                     </tr>
+                    ${historySubRowHtml}
                 `;
             });
         }
@@ -491,6 +547,20 @@
         `;
 
         document.body.appendChild(modal);
+
+        modal.querySelectorAll('.shopify-toggle-history-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const targetId = btn.getAttribute('data-target');
+                const targetRow = modal.querySelector('#' + targetId);
+                if (targetRow) {
+                    const isHidden = targetRow.style.display === 'none';
+                    targetRow.style.display = isHidden ? 'table-row' : 'none';
+                    btn.style.background = isHidden ? '#9333ea' : '#f8f5fb';
+                    btn.style.color = isHidden ? '#ffffff' : '#9333ea';
+                }
+            });
+        });
 
         const closeBtn = document.getElementById('shopify-modal-close');
         if (closeBtn) closeBtn.onclick = () => modal.remove();
