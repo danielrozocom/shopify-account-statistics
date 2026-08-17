@@ -890,18 +890,29 @@
 
                 let fetchedSuccess = false;
 
-                // Estrategia 1: Remix Data Loader Endpoint
+                // Estrategia 1 (PRIMARIA): GraphQL OrderDetails POST con token Authorization (Evita límites de tasa 429)
                 try {
-                    const resp = await targetWindow.fetch(remixUrl, {
-                        method: 'GET',
+                    const resp = await targetWindow.fetch(graphqlUrl + '?operation=OrderDetails', {
+                        method: 'POST',
                         credentials: 'include',
-                        headers: { 'Accept': 'application/json, text/plain, */*' }
+                        headers: defaultReqHeaders,
+                        body: JSON.stringify({
+                            operationName: 'OrderDetails',
+                            variables: {
+                                orderId: item.gid,
+                                isBusinessCustomer: false,
+                                redacted: false
+                            },
+                            query: ORDER_DETAILS_QUERY
+                        })
                     });
 
-                    if (resp.ok) {
+                    if (resp.status === 429) {
+                        await new Promise(r => setTimeout(r, 2000));
+                    } else if (resp.ok) {
                         const resJson = await resp.json();
-                        if (resJson?.order && !resJson.order.name) {
-                            resJson.order.name = item.name;
+                        if (resJson?.data?.order && !resJson.data.order.name) {
+                            resJson.data.order.name = item.name;
                         }
                         let currentOrders = getStoredOrders();
                         if (extractOrdersFromObj(resJson, currentOrders, true)) {
@@ -912,40 +923,7 @@
                     }
                 } catch (e1) { }
 
-                // Estrategia 2: GraphQL OrderDetails con token Authorization
-                if (!fetchedSuccess) {
-                    try {
-                        const resp = await targetWindow.fetch(graphqlUrl + '?operation=OrderDetails', {
-                            method: 'POST',
-                            credentials: 'include',
-                            headers: defaultReqHeaders,
-                            body: JSON.stringify({
-                                operationName: 'OrderDetails',
-                                variables: {
-                                    orderId: item.gid,
-                                    isBusinessCustomer: false,
-                                    redacted: false
-                                },
-                                query: ORDER_DETAILS_QUERY
-                            })
-                        });
-
-                        if (resp.ok) {
-                            const resJson = await resp.json();
-                            if (resJson?.data?.order && !resJson.data.order.name) {
-                                resJson.data.order.name = item.name;
-                            }
-                            let currentOrders = getStoredOrders();
-                            if (extractOrdersFromObj(resJson, currentOrders, true)) {
-                                if (currentOrders[item.name]) currentOrders[item.name].detailFetched = true;
-                                saveStoredOrders(currentOrders);
-                                fetchedSuccess = true;
-                            }
-                        }
-                    } catch (e2) { }
-                }
-
-                // Estrategia 3: GraphQL LineItems con token Authorization
+                // Estrategia 2 (SECUNDARIA): GraphQL LineItems POST con token Authorization
                 if (!fetchedSuccess) {
                     try {
                         const resp = await targetWindow.fetch(graphqlUrl + '?operation=LineItems', {
@@ -965,10 +943,38 @@
                             })
                         });
 
-                        if (resp.ok) {
+                        if (resp.status === 429) {
+                            await new Promise(r => setTimeout(r, 2000));
+                        } else if (resp.ok) {
                             const resJson = await resp.json();
                             if (resJson?.data?.order && !resJson.data.order.name) {
                                 resJson.data.order.name = item.name;
+                            }
+                            let currentOrders = getStoredOrders();
+                            if (extractOrdersFromObj(resJson, currentOrders, true)) {
+                                if (currentOrders[item.name]) currentOrders[item.name].detailFetched = true;
+                                saveStoredOrders(currentOrders);
+                                fetchedSuccess = true;
+                            }
+                        }
+                    } catch (e2) { }
+                }
+
+                // Estrategia 3 (RESPALDO): Remix Data Loader GET
+                if (!fetchedSuccess) {
+                    try {
+                        const resp = await targetWindow.fetch(remixUrl, {
+                            method: 'GET',
+                            credentials: 'include',
+                            headers: { 'Accept': 'application/json, text/plain, */*' }
+                        });
+
+                        if (resp.status === 429) {
+                            await new Promise(r => setTimeout(r, 2000));
+                        } else if (resp.ok) {
+                            const resJson = await resp.json();
+                            if (resJson?.order && !resJson.order.name) {
+                                resJson.order.name = item.name;
                             }
                             let currentOrders = getStoredOrders();
                             if (extractOrdersFromObj(resJson, currentOrders, true)) {
@@ -988,7 +994,7 @@
                 }
 
                 updateDashboard();
-                await new Promise(r => setTimeout(r, 120));
+                await new Promise(r => setTimeout(r, 450));
             }
         } finally {
             isSyncingDetails = false;
