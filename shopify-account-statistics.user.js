@@ -569,26 +569,26 @@
         // Capturar precio sin descuento
         const priceBefore = obj.totalPriceBeforeDiscounts?.amount || obj.subtotalBeforeDiscounts?.amount || null;
 
-        if (name && typeof name === 'string' && (name.startsWith('#') || name.startsWith('CJ')) && amount !== undefined) {
-            const priceNum = typeof amount === 'object' ? parseFloat(amount.amount) : parseFloat(amount);
-            if (!isNaN(priceNum)) {
-                const formattedName = name.startsWith('#') ? name.trim() : `#${name.trim()}`;
-                const priceBeforeNum = priceBefore ? parseFloat(priceBefore) : null;
-                const discountCode = findDeepDiscountCode(obj);
-                const discountAmount = findDeepDiscountAmount(obj);
-                const existing = uniqueOrders[formattedName] || {};
+        if (name && typeof name === 'string' && (name.startsWith('#') || name.startsWith('CJ'))) {
+            const formattedName = name.startsWith('#') ? name.trim() : `#${name.trim()}`;
+            const existing = uniqueOrders[formattedName] || {};
+            const rawPriceNum = (amount !== undefined) ? (typeof amount === 'object' ? parseFloat(amount.amount) : parseFloat(amount)) : NaN;
+            const priceNum = !isNaN(rawPriceNum) ? rawPriceNum : (existing.price || 0);
 
-                uniqueOrders[formattedName] = {
-                    price: priceNum,
-                    priceBeforeDiscounts: priceBeforeNum || existing.priceBeforeDiscounts || null,
-                    discountAmount: discountAmount > 0 ? discountAmount : (existing.discountAmount || 0),
-                    date: date || existing.date || null,
-                    discountCode: discountCode || existing.discountCode || null,
-                    gid: gid || existing.gid || null,
-                    detailFetched: existing.detailFetched || false
-                };
-                updated = true;
-            }
+            const priceBeforeNum = priceBefore ? parseFloat(priceBefore) : null;
+            const discountCode = findDeepDiscountCode(obj);
+            const discountAmount = findDeepDiscountAmount(obj);
+
+            uniqueOrders[formattedName] = {
+                price: priceNum,
+                priceBeforeDiscounts: priceBeforeNum || existing.priceBeforeDiscounts || null,
+                discountAmount: discountAmount > 0 ? discountAmount : (existing.discountAmount || 0),
+                date: date || existing.date || null,
+                discountCode: discountCode || existing.discountCode || null,
+                gid: gid || existing.gid || null,
+                detailFetched: true
+            };
+            updated = true;
             return updated;
         }
 
