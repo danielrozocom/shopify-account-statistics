@@ -102,7 +102,7 @@
             }
         } else if (position === 'last') {
             const loadBtn = getPaginationButton();
-            if (loadBtn) {
+            if (loadBtn && !isFullySynced) {
                 const confirmLoad = confirm('Aún hay más pedidos sin cargar. ¿Deseas cargar automáticamente todos los pedidos restantes en segundo plano para ir al pedido más antiguo?');
                 if (confirmLoad) {
                     await loadAllOrders();
@@ -211,7 +211,7 @@
                         <span id="shopify-stat-badge" style="font-size: 11px; background: ${badgeColor}; color: #fff; padding: 5px 10px; border-radius: 6px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
                             ${statusText}
                         </span>
-                        ${hasMorePagesDetected && !isAutoLoadingAll ? `
+                        ${statusText.includes('parcial') && !isAutoLoadingAll ? `
                             <button id="shopify-btn-load-all" style="padding: 5px 10px; border-radius: 6px; border: 1px solid ${themeColor}; background: #ffffff; color: #16081e; font-size: 11px; font-weight: 600; cursor: pointer;">
                                 🔄 Cargar todos
                             </button>
