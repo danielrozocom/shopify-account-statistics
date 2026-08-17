@@ -13,10 +13,12 @@
 
     const STORAGE_KEY = 'shopify_orders_database';
     let currentFilterMode = 'all'; // 'all', 'month', 'year', 'custom'
+    let currentDiscountFilter = 'all'; // 'all', 'with_discount', 'without_discount', or specific code string
     let customStartDate = '';
     let customEndDate = '';
     let isAutoLoadingAll = false;
     let hasMorePagesDetected = false;
+    let isFullySynced = false;
 
     function formatCurrency(amount) {
         return new Intl.NumberFormat('es-CO', {
@@ -135,10 +137,22 @@
         }
     }
 
-    function renderPanel(count, total, avg, statusText, statusBgColor = null, isLoading = false) {
+    function getCapturedDiscountCodes(ordersMap) {
+        const codes = new Set();
+        for (const key in ordersMap) {
+            if (ordersMap[key]?.discountCode) {
+                codes.add(ordersMap[key].discountCode);
+            }
+        }
+        return Array.from(codes);
+    }
+
+    function renderPanel(count, totalSpentFormatted, totalGrossFormatted, totalSavingsFormatted, avgFormatted, statusText, statusBgColor = null, isLoading = false) {
         let panel = document.getElementById('shopify-top-analytics-panel');
         const themeColor = getShopifyBrandColor();
         const badgeColor = statusBgColor || themeColor;
+        const ordersMap = getStoredOrders();
+        const discountCodes = getCapturedDiscountCodes(ordersMap);
 
         if (!panel) {
             panel = document.createElement('div');
@@ -171,18 +185,22 @@
 
         if (isLoading && !panel.querySelector('#shopify-stat-count')) {
             panel.innerHTML = `
-                <div style="display: flex; gap: 30px; flex-wrap: wrap; align-items: center; width: 100%;">
+                <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; width: 100%;">
+                    <div style="flex: 1; min-width: 100px;">
+                        <span style="font-size: 11px; color: #70647a; display: block; font-weight: 500; text-transform: uppercase;">Órdenes</span>
+                        <div style="height: 22px; width: 50px; background: #e0e0e0; border-radius: 4px;"></div>
+                    </div>
                     <div style="flex: 1; min-width: 130px;">
-                        <span style="font-size: 11px; color: #70647a; display: block; font-weight: 500; text-transform: uppercase;">Órdenes Totales</span>
-                        <div style="height: 22px; width: 60px; background: #e0e0e0; border-radius: 4px;"></div>
-                    </div>
-                    <div style="flex: 1; min-width: 160px;">
                         <span style="font-size: 11px; color: #70647a; display: block; font-weight: 500; text-transform: uppercase;">Total Gastado</span>
-                        <div style="height: 22px; width: 110px; background: #e0e0e0; border-radius: 4px;"></div>
+                        <div style="height: 22px; width: 100px; background: #e0e0e0; border-radius: 4px;"></div>
                     </div>
-                    <div style="flex: 1; min-width: 160px;">
-                        <span style="font-size: 11px; color: #70647a; display: block; font-weight: 500; text-transform: uppercase;">Promedio por Orden</span>
-                        <div style="height: 22px; width: 110px; background: #e0e0e0; border-radius: 4px;"></div>
+                    <div style="flex: 1; min-width: 130px;">
+                        <span style="font-size: 11px; color: #70647a; display: block; font-weight: 500; text-transform: uppercase;">Sin Descuento</span>
+                        <div style="height: 22px; width: 100px; background: #e0e0e0; border-radius: 4px;"></div>
+                    </div>
+                    <div style="flex: 1; min-width: 130px;">
+                        <span style="font-size: 11px; color: #2e7d32; display: block; font-weight: 600; text-transform: uppercase;">Total Ahorrado 🎉</span>
+                        <div style="height: 22px; width: 100px; background: #e0e0e0; border-radius: 4px;"></div>
                     </div>
                     <div>
                         <span style="font-size: 10px; background: #e0e0e0; color: #555; padding: 4px 8px; border-radius: 6px; font-weight: 600;">Cargando...</span>
@@ -190,20 +208,37 @@
                 </div>
             `;
         } else if (!isEditing || !panel.querySelector('#shopify-stat-count')) {
+            let discountOptionsHtml = `
+                <option value="all" ${currentDiscountFilter === 'all' ? 'selected' : ''}>Todos los pedidos</option>
+                <option value="with_discount" ${currentDiscountFilter === 'with_discount' ? 'selected' : ''}>Con cualquier descuento</option>
+                <option value="without_discount" ${currentDiscountFilter === 'without_discount' ? 'selected' : ''}>Sin descuento</option>
+            `;
+            discountCodes.forEach(code => {
+                discountOptionsHtml += `<option value="${code}" ${currentDiscountFilter === code ? 'selected' : ''}>🏷️ ${code}</option>`;
+            });
+
             panel.innerHTML = `
-                <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; justify-content: space-between; width: 100%;">
-                    <div style="display: flex; gap: 24px; flex-wrap: wrap; align-items: center; flex: 1;">
-                        <div style="min-width: 120px;">
-                            <span style="font-size: 11px; color: #70647a; display: block; font-weight: 500; text-transform: uppercase;">Órdenes Totales</span>
-                            <span id="shopify-stat-count" style="font-size: 18px; font-weight: 700; color: #16081e;">${count}</span>
+                <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: center; justify-content: space-between; width: 100%;">
+                    <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; flex: 1;">
+                        <div style="min-width: 90px;">
+                            <span style="font-size: 11px; color: #70647a; display: block; font-weight: 500; text-transform: uppercase;">Órdenes</span>
+                            <span id="shopify-stat-count" style="font-size: 17px; font-weight: 700; color: #16081e;">${count}</span>
                         </div>
-                        <div style="min-width: 150px;">
+                        <div style="min-width: 130px;">
                             <span style="font-size: 11px; color: #70647a; display: block; font-weight: 500; text-transform: uppercase;">Total Gastado</span>
-                            <span id="shopify-stat-total" style="font-size: 18px; font-weight: 700; color: #16081e;">${total}</span>
+                            <span id="shopify-stat-total" style="font-size: 17px; font-weight: 700; color: #16081e;">${totalSpentFormatted}</span>
                         </div>
-                        <div style="min-width: 150px;">
-                            <span style="font-size: 11px; color: #70647a; display: block; font-weight: 500; text-transform: uppercase;">Promedio por Orden</span>
-                            <span id="shopify-stat-avg" style="font-size: 18px; font-weight: 700; color: #16081e;">${avg}</span>
+                        <div style="min-width: 130px;">
+                            <span style="font-size: 11px; color: #70647a; display: block; font-weight: 500; text-transform: uppercase;">Sin Descuento</span>
+                            <span id="shopify-stat-gross" style="font-size: 17px; font-weight: 700; color: #555555;">${totalGrossFormatted}</span>
+                        </div>
+                        <div style="min-width: 130px;">
+                            <span style="font-size: 11px; color: #2e7d32; display: block; font-weight: 600; text-transform: uppercase;">Total Ahorrado 🎉</span>
+                            <span id="shopify-stat-savings" style="font-size: 17px; font-weight: 700; color: #2e7d32;">${totalSavingsFormatted}</span>
+                        </div>
+                        <div style="min-width: 120px;">
+                            <span style="font-size: 11px; color: #70647a; display: block; font-weight: 500; text-transform: uppercase;">Promedio</span>
+                            <span id="shopify-stat-avg" style="font-size: 17px; font-weight: 700; color: #16081e;">${avgFormatted}</span>
                         </div>
                     </div>
                     
@@ -219,29 +254,38 @@
                     </div>
                 </div>
 
-                <!-- Controles de Filtros de Fecha y Navegación Rápida -->
+                <!-- Controles de Filtros de Fecha, Descuento y Navegación Rápida -->
                 <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center; justify-content: space-between; border-top: 1px solid #f0ecf4; padding-top: 12px;">
-                    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                        <span style="font-size: 12px; font-weight: 600; color: #4a3e56;">📅 Filtrar por fecha:</span>
-                        <select id="shopify-filter-mode-select" style="padding: 6px 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 12px; font-family: inherit; background: #fff; cursor: pointer;">
-                            <option value="all" ${currentFilterMode === 'all' ? 'selected' : ''}>Todas las fechas</option>
-                            <option value="month" ${currentFilterMode === 'month' ? 'selected' : ''}>Este mes</option>
-                            <option value="year" ${currentFilterMode === 'year' ? 'selected' : ''}>Este año</option>
-                            <option value="custom" ${currentFilterMode === 'custom' ? 'selected' : ''}>Rango personalizado</option>
-                        </select>
+                    <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                        <div style="display: flex; gap: 6px; align-items: center;">
+                            <span style="font-size: 12px; font-weight: 600; color: #4a3e56;">📅 Fecha:</span>
+                            <select id="shopify-filter-mode-select" style="padding: 5px 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 11px; font-family: inherit; background: #fff; cursor: pointer;">
+                                <option value="all" ${currentFilterMode === 'all' ? 'selected' : ''}>Todas</option>
+                                <option value="month" ${currentFilterMode === 'month' ? 'selected' : ''}>Este mes</option>
+                                <option value="year" ${currentFilterMode === 'year' ? 'selected' : ''}>Este año</option>
+                                <option value="custom" ${currentFilterMode === 'custom' ? 'selected' : ''}>Personalizado</option>
+                            </select>
 
-                        <div id="shopify-custom-date-container" style="display: ${currentFilterMode === 'custom' ? 'inline-flex' : 'none'}; gap: 6px; align-items: center;">
-                            <input type="date" id="shopify-date-start" value="${customStartDate}" style="padding: 4px 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 11px;">
-                            <span style="font-size: 11px; color: #666;">a</span>
-                            <input type="date" id="shopify-date-end" value="${customEndDate}" style="padding: 4px 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 11px;">
+                            <div id="shopify-custom-date-container" style="display: ${currentFilterMode === 'custom' ? 'inline-flex' : 'none'}; gap: 4px; align-items: center;">
+                                <input type="date" id="shopify-date-start" value="${customStartDate}" style="padding: 3px 6px; border-radius: 6px; border: 1px solid #ccc; font-size: 11px;">
+                                <span style="font-size: 11px; color: #666;">a</span>
+                                <input type="date" id="shopify-date-end" value="${customEndDate}" style="padding: 3px 6px; border-radius: 6px; border: 1px solid #ccc; font-size: 11px;">
+                            </div>
+                        </div>
+
+                        <div style="display: flex; gap: 6px; align-items: center;">
+                            <span style="font-size: 12px; font-weight: 600; color: #4a3e56;">🏷️ Descuentos:</span>
+                            <select id="shopify-filter-discount-select" style="padding: 5px 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 11px; font-family: inherit; background: #fff; cursor: pointer;">
+                                ${discountOptionsHtml}
+                            </select>
                         </div>
                     </div>
 
                     <div style="display: flex; gap: 8px; align-items: center;">
-                        <button id="shopify-btn-first-order-panel" style="padding: 6px 12px; border-radius: 20px; border: 1px solid ${themeColor}; background: #f8f5fb; color: #16081e; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                        <button id="shopify-btn-first-order-panel" style="padding: 5px 10px; border-radius: 20px; border: 1px solid ${themeColor}; background: #f8f5fb; color: #16081e; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px;">
                             ⬆️ Pedido más reciente
                         </button>
-                        <button id="shopify-btn-last-order-panel" style="padding: 6px 12px; border-radius: 20px; border: 1px solid ${themeColor}; background: #f8f5fb; color: #16081e; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                        <button id="shopify-btn-last-order-panel" style="padding: 5px 10px; border-radius: 20px; border: 1px solid ${themeColor}; background: #f8f5fb; color: #16081e; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px;">
                             ⬇️ Pedido más antiguo
                         </button>
                     </div>
@@ -256,6 +300,14 @@
                     if (dateContainer) {
                         dateContainer.style.display = currentFilterMode === 'custom' ? 'inline-flex' : 'none';
                     }
+                    updateDashboard();
+                };
+            }
+
+            const discountSelectEl = document.getElementById('shopify-filter-discount-select');
+            if (discountSelectEl) {
+                discountSelectEl.onchange = (e) => {
+                    currentDiscountFilter = e.target.value;
                     updateDashboard();
                 };
             }
@@ -289,10 +341,16 @@
             if (countEl) countEl.textContent = count;
 
             const totalEl = panel.querySelector('#shopify-stat-total');
-            if (totalEl) totalEl.textContent = total;
+            if (totalEl) totalEl.textContent = totalSpentFormatted;
+
+            const grossEl = panel.querySelector('#shopify-stat-gross');
+            if (grossEl) grossEl.textContent = totalGrossFormatted;
+
+            const savingsEl = panel.querySelector('#shopify-stat-savings');
+            if (savingsEl) savingsEl.textContent = totalSavingsFormatted;
 
             const avgEl = panel.querySelector('#shopify-stat-avg');
-            if (avgEl) avgEl.textContent = avg;
+            if (avgEl) avgEl.textContent = avgFormatted;
 
             const badgeEl = panel.querySelector('#shopify-stat-badge');
             if (badgeEl) {
@@ -376,15 +434,19 @@
 
                 const item = parsed[key];
                 const price = typeof item === 'object' && item !== null ? parseFloat(item.price) : parseFloat(item);
+                const priceBeforeDiscounts = typeof item === 'object' && item !== null ? parseFloat(item.priceBeforeDiscounts || 0) : null;
+                const discountAmount = typeof item === 'object' && item !== null ? parseFloat(item.discountAmount || 0) : 0;
                 const date = typeof item === 'object' && item !== null ? item.date : null;
+                const discountCode = typeof item === 'object' && item !== null ? item.discountCode : null;
 
                 if (!isNaN(price)) {
                     if (!cleaned[cleanKey]) {
-                        cleaned[cleanKey] = { price, date };
+                        cleaned[cleanKey] = { price, priceBeforeDiscounts, discountAmount, date, discountCode };
                     } else {
-                        if (!cleaned[cleanKey].date && date) {
-                            cleaned[cleanKey].date = date;
-                        }
+                        if (!cleaned[cleanKey].date && date) cleaned[cleanKey].date = date;
+                        if (!cleaned[cleanKey].discountCode && discountCode) cleaned[cleanKey].discountCode = discountCode;
+                        if (!cleaned[cleanKey].priceBeforeDiscounts && priceBeforeDiscounts) cleaned[cleanKey].priceBeforeDiscounts = priceBeforeDiscounts;
+                        if (!cleaned[cleanKey].discountAmount && discountAmount) cleaned[cleanKey].discountAmount = discountAmount;
                     }
                 }
             }
@@ -419,6 +481,21 @@
         const amount = obj.totalPrice?.amount || obj.currentTotalPrice?.amount || obj.totalPrice || obj.total;
         const date = obj.processedAt || obj.createdAt || obj.processed_at || obj.created_at;
 
+        // Capturar precio sin descuento y montos de descuento
+        const priceBefore = obj.totalPriceBeforeDiscounts?.amount || obj.subtotalBeforeDiscounts?.amount || null;
+        let discountAmount = 0;
+        if (obj.totalSavings?.amount) {
+            discountAmount = parseFloat(obj.totalSavings.amount);
+        } else if (Array.isArray(obj.discountAllocations)) {
+            obj.discountAllocations.forEach(da => {
+                if (da.allocatedAmount?.amount) discountAmount += parseFloat(da.allocatedAmount.amount);
+            });
+        } else if (Array.isArray(obj.discountInformation)) {
+            obj.discountInformation.forEach(di => {
+                if (di.discountValue?.amount) discountAmount += parseFloat(di.discountValue.amount);
+            });
+        }
+
         // Capturar código o nombre del descuento desde la consulta de detalles de GraphQL (LineItems / OrderDetails)
         let discountCode = null;
         if (obj.discountApplication?.code) {
@@ -435,14 +512,17 @@
             const priceNum = typeof amount === 'object' ? parseFloat(amount.amount) : parseFloat(amount);
             if (!isNaN(priceNum)) {
                 const formattedName = name.startsWith('#') ? name.trim() : `#${name.trim()}`;
-                if (!uniqueOrders[formattedName] || (!uniqueOrders[formattedName].date && date) || (discountCode && !uniqueOrders[formattedName].discountCode)) {
-                    uniqueOrders[formattedName] = {
-                        price: priceNum,
-                        date: date || uniqueOrders[formattedName]?.date || null,
-                        discountCode: discountCode || uniqueOrders[formattedName]?.discountCode || null
-                    };
-                    updated = true;
-                }
+                const priceBeforeNum = priceBefore ? parseFloat(priceBefore) : null;
+                const existing = uniqueOrders[formattedName] || {};
+
+                uniqueOrders[formattedName] = {
+                    price: priceNum,
+                    priceBeforeDiscounts: priceBeforeNum || existing.priceBeforeDiscounts || null,
+                    discountAmount: discountAmount > 0 ? discountAmount : (existing.discountAmount || 0),
+                    date: date || existing.date || null,
+                    discountCode: discountCode || existing.discountCode || null
+                };
+                updated = true;
             }
             return updated;
         }
@@ -543,7 +623,7 @@
         articles.forEach(article => {
             const orderId = extractOrderIdFromArticle(article);
             if (orderId) {
-                if (currentFilterMode === 'all') {
+                if (currentFilterMode === 'all' && currentDiscountFilter === 'all') {
                     article.style.display = '';
                 } else {
                     if (filterSet.has(orderId)) {
@@ -595,35 +675,45 @@
         return uniqueOrders;
     }
 
-    function filterOrdersByDate(ordersMap) {
+    function filterOrders(ordersMap) {
         const orderIds = Object.keys(ordersMap);
         const now = new Date();
 
         return orderIds.filter(id => {
             const order = ordersMap[id];
-            if (currentFilterMode === 'all') return true;
-            if (!order || !order.date) return false;
+            if (!order) return false;
 
-            const orderDate = new Date(order.date);
-            if (isNaN(orderDate.getTime())) return false;
+            // 1. Filtro por Fecha
+            if (currentFilterMode !== 'all') {
+                if (!order.date) return false;
+                const orderDate = new Date(order.date);
+                if (isNaN(orderDate.getTime())) return false;
 
-            if (currentFilterMode === 'month') {
-                return orderDate.getMonth() === now.getMonth() && orderDate.getFullYear() === now.getFullYear();
-            }
-            if (currentFilterMode === 'year') {
-                return orderDate.getFullYear() === now.getFullYear();
-            }
-            if (currentFilterMode === 'custom') {
-                if (customStartDate) {
-                    const start = new Date(customStartDate + 'T00:00:00');
-                    if (orderDate < start) return false;
+                if (currentFilterMode === 'month') {
+                    if (orderDate.getMonth() !== now.getMonth() || orderDate.getFullYear() !== now.getFullYear()) return false;
+                } else if (currentFilterMode === 'year') {
+                    if (orderDate.getFullYear() !== now.getFullYear()) return false;
+                } else if (currentFilterMode === 'custom') {
+                    if (customStartDate) {
+                        const start = new Date(customStartDate + 'T00:00:00');
+                        if (orderDate < start) return false;
+                    }
+                    if (customEndDate) {
+                        const end = new Date(customEndDate + 'T23:59:59');
+                        if (orderDate > end) return false;
+                    }
                 }
-                if (customEndDate) {
-                    const end = new Date(customEndDate + 'T23:59:59');
-                    if (orderDate > end) return false;
-                }
-                return true;
             }
+
+            // 2. Filtro por Descuento
+            if (currentDiscountFilter === 'with_discount') {
+                if (!order.discountCode && (!order.discountAmount || order.discountAmount <= 0)) return false;
+            } else if (currentDiscountFilter === 'without_discount') {
+                if (order.discountCode || (order.discountAmount && order.discountAmount > 0)) return false;
+            } else if (currentDiscountFilter !== 'all') {
+                if (order.discountCode !== currentDiscountFilter) return false;
+            }
+
             return true;
         });
     }
@@ -650,34 +740,47 @@
         if (isAutoLoadingAll) {
             statusLabel = '🔄 Sincronizando...';
             statusBgColor = '#0288d1'; // azul
-        } else if (currentFilterMode !== 'all') {
-            const filteredIds = filterOrdersByDate(ordersMap);
+            isFullySynced = false;
+        } else if (currentFilterMode !== 'all' || currentDiscountFilter !== 'all') {
+            const filteredIds = filterOrders(ordersMap);
             statusLabel = `🔍 Filtrando (${filteredIds.length} de ${totalAllOrders})`;
             statusBgColor = '#7b1fa2'; // morado
+            isFullySynced = isNewestInCache;
         } else if (totalAllOrders === 0) {
             statusLabel = '🔄 Sincronizando...';
             statusBgColor = '#0288d1';
+            isFullySynced = false;
         } else if (!isNewestInCache && pagBtn) {
             statusLabel = '⚠️ Sincronización parcial';
             statusBgColor = '#e65100';
+            isFullySynced = false;
         } else {
             statusLabel = '✅ Sincronizado';
             statusBgColor = '#2e7d32';
+            isFullySynced = true;
         }
 
-        const filteredIds = filterOrdersByDate(ordersMap);
+        const filteredIds = filterOrders(ordersMap);
         const orderCount = filteredIds.length;
 
         let totalSpent = 0;
+        let totalGross = 0;
+        let totalSavings = 0;
+
         filteredIds.forEach(id => {
             const orderData = ordersMap[id];
-            const price = typeof orderData === 'object' ? orderData.price : orderData;
+            const price = orderData.price || 0;
+            const discountAmt = orderData.discountAmount || 0;
+            const priceBefore = orderData.priceBeforeDiscounts || (price + discountAmt);
+
             totalSpent += price;
+            totalGross += priceBefore;
+            totalSavings += (priceBefore > price ? (priceBefore - price) : discountAmt);
         });
 
         const average = orderCount > 0 ? totalSpent / orderCount : 0;
 
-        renderPanel(orderCount, formatCurrency(totalSpent), formatCurrency(average), statusLabel, statusBgColor, false);
+        renderPanel(orderCount, formatCurrency(totalSpent), formatCurrency(totalGross), formatCurrency(totalSavings), formatCurrency(average), statusLabel, statusBgColor, false);
         injectDatesIntoDOM();
         applyDOMDateFilter(filteredIds);
     }
@@ -685,16 +788,27 @@
     setupFetchInterceptor();
 
     window.addEventListener('load', () => {
-        renderPanel(0, "$ 0,00", "$ 0,00", "Cargando...", null, true);
+        renderPanel(0, "$ 0,00", "$ 0,00", "$ 0,00", "$ 0,00", "Cargando...", null, true);
 
         const cached = getStoredOrders();
         const ids = Object.keys(cached);
         if (ids.length > 0) {
-            let total = 0;
+            let totalSpent = 0;
+            let totalGross = 0;
+            let totalSavings = 0;
+
             ids.forEach(id => {
-                total += (typeof cached[id] === 'object' ? cached[id].price : cached[id]);
+                const item = cached[id];
+                const price = typeof item === 'object' ? item.price : item;
+                const discountAmt = typeof item === 'object' ? (item.discountAmount || 0) : 0;
+                const priceBefore = typeof item === 'object' ? (item.priceBeforeDiscounts || (price + discountAmt)) : price;
+
+                totalSpent += price;
+                totalGross += priceBefore;
+                totalSavings += (priceBefore > price ? (priceBefore - price) : discountAmt);
             });
-            renderPanel(ids.length, formatCurrency(total), formatCurrency(total / ids.length), "Caché Local", null, false);
+
+            renderPanel(ids.length, formatCurrency(totalSpent), formatCurrency(totalGross), formatCurrency(totalSavings), formatCurrency(totalSpent / ids.length), "Caché Local", null, false);
             injectDatesIntoDOM();
         }
 
