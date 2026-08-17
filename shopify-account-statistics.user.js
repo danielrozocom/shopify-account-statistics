@@ -1698,21 +1698,55 @@
     function applyDOMDateFilter(filteredOrderIds) {
         const filterSet = new Set(filteredOrderIds);
         const articles = document.querySelectorAll('article');
+        let visibleCount = 0;
 
         articles.forEach(article => {
             const orderId = extractOrderIdFromArticle(article);
             if (orderId) {
                 if (currentFilterMode === 'all' && currentDiscountFilter === 'all') {
                     article.style.display = '';
+                    visibleCount++;
                 } else {
                     if (filterSet.has(orderId)) {
                         article.style.display = '';
+                        visibleCount++;
                     } else {
                         article.style.display = 'none';
                     }
                 }
             }
         });
+
+        let emptyNotice = document.getElementById('shopify-empty-filter-notice');
+        if (visibleCount === 0 && (currentFilterMode !== 'all' || currentDiscountFilter !== 'all')) {
+            if (!emptyNotice) {
+                emptyNotice = document.createElement('div');
+                emptyNotice.id = 'shopify-empty-filter-notice';
+                emptyNotice.style.cssText = `
+                    margin-top: 20px;
+                    padding: 24px;
+                    background: #ffffff;
+                    border: 1px dashed #cccccc;
+                    border-radius: 12px;
+                    text-align: center;
+                    color: #70647a;
+                    font-family: 'Poppins', sans-serif;
+                `;
+                emptyNotice.innerHTML = `
+                    <span style="font-size: 24px; display: block; margin-bottom: 8px;">🔍</span>
+                    <strong style="color: #16081e; font-size: 14px;">No hay pedidos en pantalla que coincidan con este filtro.</strong>
+                    <span style="display: block; font-size: 12px; margin-top: 4px;">Selecciona "Todas" o cambia el rango de fechas. Si tienes pedidos antiguos, haz clic en "Cargar todos".</span>
+                `;
+                const panel = document.getElementById('shopify-top-analytics-panel');
+                if (panel && panel.parentNode) {
+                    panel.parentNode.insertBefore(emptyNotice, panel.nextSibling);
+                }
+            } else {
+                emptyNotice.style.display = 'block';
+            }
+        } else if (emptyNotice) {
+            emptyNotice.style.display = 'none';
+        }
     }
 
     function extractGidFromArticle(article) {
@@ -1771,6 +1805,27 @@
         return uniqueOrders;
     }
 
+    const MONTH_MAP = {
+        'ENE': 0, 'FEB': 1, 'MAR': 2, 'ABR': 3, 'MAY': 4, 'JUN': 5,
+        'JUL': 6, 'AGO': 7, 'SEP': 8, 'OCT': 9, 'NOV': 10, 'DIC': 11
+    };
+
+    function parseSpanishDate(dateStr) {
+        if (!dateStr || typeof dateStr !== 'string') return null;
+        const isoDate = new Date(dateStr);
+        if (!isNaN(isoDate.getTime())) return isoDate;
+
+        const match = dateStr.match(/(\d{1,2})[\/\s]+([A-Za-z]{3})[\/\s]+(\d{4})/i);
+        if (match) {
+            const day = parseInt(match[1], 10);
+            const monthStr = match[2].toUpperCase();
+            const year = parseInt(match[3], 10);
+            const month = MONTH_MAP[monthStr];
+            if (month !== undefined) return new Date(year, month, day);
+        }
+        return null;
+    }
+
     function filterOrders(ordersMap) {
         const orderIds = Object.keys(ordersMap);
         const now = new Date();
@@ -1782,8 +1837,8 @@
             // 1. Filtro por Fecha
             if (currentFilterMode !== 'all') {
                 if (!order.date) return false;
-                const orderDate = new Date(order.date);
-                if (isNaN(orderDate.getTime())) return false;
+                const orderDate = parseSpanishDate(order.date);
+                if (!orderDate || isNaN(orderDate.getTime())) return false;
 
                 if (currentFilterMode === 'month') {
                     if (orderDate.getMonth() !== now.getMonth() || orderDate.getFullYear() !== now.getFullYear()) return false;
