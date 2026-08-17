@@ -39,7 +39,8 @@
         alert: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>`,
         search: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>`,
         trophy: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;color:#d97706;"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>`,
-        bag: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><line x1="3" x2="21" y1="6" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`
+        bag: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><line x1="3" x2="21" y1="6" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`,
+        note: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:3px;color:#b45309;"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>`
     };
 
     function injectSpinStyles() {
@@ -730,6 +731,12 @@
             const extractedItems = extractLineItemsFromObj(obj);
             const combinedItems = (extractedItems.length > 0) ? extractedItems : (existing.items || null);
 
+            let extractedNote = obj.note || obj.customerNote || null;
+            if (!extractedNote && Array.isArray(obj.customAttributes) && obj.customAttributes.length > 0) {
+                extractedNote = obj.customAttributes.map(a => `${a.key}: ${a.value}`).join(' | ');
+            }
+            const note = extractedNote || existing.note || null;
+
             const hasDetailInfo = isDetailResponse || discountCode !== null || discountAmount > 0 || priceBeforeNum !== null || (combinedItems && combinedItems.length > 0);
 
             uniqueOrders[targetKey] = {
@@ -741,7 +748,8 @@
                 gid: gid || existing.gid || null,
                 detailFetched: hasDetailInfo ? true : (existing.detailFetched || false),
                 verifiedNoDiscount: isDetailResponse ? true : (existing.verifiedNoDiscount || false),
-                items: combinedItems
+                items: combinedItems,
+                note: note
             };
             updated = true;
             return updated;
@@ -764,6 +772,8 @@
     id
     name
     processedAt
+    note
+    customAttributes { key value }
     currentTotalPrice: totalPrice { amount currencyCode }
     subtotal: subtotalBeforeDiscounts { amount currencyCode }
     totalSavings { amount currencyCode }
@@ -1188,6 +1198,37 @@
                             badge.textContent = badgeText;
                             subSpan.appendChild(badge);
                         }
+                    }
+                }
+
+                // Inyección de la etiqueta de nota de pedido si existe
+                if (orderInfo.note) {
+                    let existingNoteBadge = article.querySelector('.shopify-order-note-badge');
+                    if (existingNoteBadge) {
+                        if (existingNoteBadge.getAttribute('data-note') !== orderInfo.note) {
+                            existingNoteBadge.setAttribute('data-note', orderInfo.note);
+                            existingNoteBadge.innerHTML = `${SVG_ICONS.note} <strong>Nota:</strong> ${orderInfo.note}`;
+                        }
+                    } else {
+                        const noteBadge = document.createElement('div');
+                        noteBadge.className = 'shopify-order-note-badge';
+                        noteBadge.setAttribute('data-note', orderInfo.note);
+                        noteBadge.style.cssText = `
+                            margin-top: 6px;
+                            font-size: 11px;
+                            background: #fff8e1;
+                            color: #b45309;
+                            padding: 4px 10px;
+                            border-radius: 6px;
+                            font-weight: 500;
+                            display: inline-flex;
+                            align-items: center;
+                            gap: 4px;
+                            border: 1px solid #fef3c7;
+                            width: fit-content;
+                        `;
+                        noteBadge.innerHTML = `${SVG_ICONS.note} <strong>Nota:</strong> ${orderInfo.note}`;
+                        article.appendChild(noteBadge);
                     }
                 }
             }
