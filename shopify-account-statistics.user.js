@@ -930,7 +930,7 @@
                 const quantity = item.quantity !== undefined ? parseInt(item.quantity, 10) : 1;
                 const price = item.currentTotalPrice?.amount || item.price?.amount || item.totalPriceWithDiscounts?.amount || 0;
                 const imgUrl = item.image?.url || null;
-                const prodUrl = item.url || item.onlineStoreUrl || item.product?.onlineStoreUrl || (item.product?.handle ? `/products/${item.product.handle}` : null) || (item.variant?.product?.handle ? `/products/${item.variant.product.handle}` : null) || null;
+                const prodUrl = item.onlineStoreUrl || item.url || item.product?.onlineStoreUrl || (item.product?.handle ? `/products/${item.product.handle}` : null) || (item.variant?.product?.handle ? `/products/${item.variant.product.handle}` : null) || null;
 
                 if (title && typeof title === 'string') {
                     items.push({
@@ -1156,6 +1156,7 @@
               image { url altText }
               title
               quantity
+              onlineStoreUrl
             }
           }
         }
@@ -1179,6 +1180,7 @@
               title
               presentmentTitle
               quantity
+              onlineStoreUrl
               currentTotalPrice: totalPriceWithDiscounts { amount currencyCode }
               totalPriceBeforeDiscounts: totalPriceBeforeDiscounts { amount currencyCode }
               discountAllocations {
