@@ -37,7 +37,9 @@
         arrowUp: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>`,
         arrowDown: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>`,
         alert: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>`,
-        search: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>`
+        search: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>`,
+        trophy: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;color:#d97706;"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>`,
+        bag: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><line x1="3" x2="21" y1="6" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`
     };
 
     function injectSpinStyles() {
@@ -181,6 +183,10 @@
         const badgeColor = statusBgColor || themeColor;
         const ordersMap = getStoredOrders();
         const discountCodes = getCapturedDiscountCodes(ordersMap);
+        const topProducts = getTopProducts(ordersMap);
+        const topProduct = topProducts.length > 0 ? topProducts[0] : null;
+        const topProductTitle = topProduct ? (topProduct.title.length > 22 ? topProduct.title.substring(0, 22) + '...' : topProduct.title) : 'Sin datos';
+        const topProductSub = topProduct ? `${topProduct.quantity} und. · ${formatCurrency(topProduct.totalSpent)}` : 'Sincronizando...';
 
         if (!panel) {
             panel = document.createElement('div');
@@ -247,36 +253,48 @@
 
             panel.innerHTML = `
                 <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: center; justify-content: space-between; width: 100%;">
-                    <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; flex: 1;">
-                        <div style="min-width: 90px;">
+                    <div style="display: flex; gap: 18px; flex-wrap: wrap; align-items: center; flex: 1;">
+                        <div style="min-width: 80px;">
                             <span style="font-size: 11px; color: #70647a; display: flex; align-items: center; gap: 4px; font-weight: 500; text-transform: uppercase;">
                                 ${SVG_ICONS.boxes} Órdenes
                             </span>
                             <span id="shopify-stat-count" style="font-size: 17px; font-weight: 700; color: #16081e;">${count}</span>
                         </div>
-                        <div style="min-width: 130px;">
+                        <div style="min-width: 120px;">
                             <span style="font-size: 11px; color: #70647a; display: flex; align-items: center; gap: 4px; font-weight: 500; text-transform: uppercase;">
                                 ${SVG_ICONS.wallet} Total Gastado
                             </span>
                             <span id="shopify-stat-total" style="font-size: 17px; font-weight: 700; color: #16081e;">${totalSpentFormatted}</span>
                         </div>
-                        <div style="min-width: 130px;">
+                        <div style="min-width: 120px;">
                             <span style="font-size: 11px; color: #70647a; display: flex; align-items: center; gap: 4px; font-weight: 500; text-transform: uppercase;">
                                 ${SVG_ICONS.receipt} Sin Descuento
                             </span>
                             <span id="shopify-stat-gross" style="font-size: 17px; font-weight: 700; color: #555555;">${totalGrossFormatted}</span>
                         </div>
-                        <div style="min-width: 130px;">
+                        <div style="min-width: 120px;">
                             <span style="font-size: 11px; color: #2e7d32; display: flex; align-items: center; gap: 4px; font-weight: 600; text-transform: uppercase;">
                                 ${SVG_ICONS.piggy} Total Ahorrado
                             </span>
                             <span id="shopify-stat-savings" style="font-size: 17px; font-weight: 700; color: #2e7d32;">${totalSavingsFormatted}</span>
                         </div>
-                        <div style="min-width: 120px;">
+                        <div style="min-width: 110px;">
                             <span style="font-size: 11px; color: #70647a; display: flex; align-items: center; gap: 4px; font-weight: 500; text-transform: uppercase;">
                                 ${SVG_ICONS.chart} Promedio
                             </span>
                             <span id="shopify-stat-avg" style="font-size: 17px; font-weight: 700; color: #16081e;">${avgFormatted}</span>
+                        </div>
+                        <div style="min-width: 140px; border-left: 1px dashed #e2d9ec; padding-left: 12px;">
+                            <span style="font-size: 11px; color: #b45309; display: flex; align-items: center; gap: 4px; font-weight: 600; text-transform: uppercase;">
+                                ${SVG_ICONS.trophy} Más Comprado
+                            </span>
+                            <div style="display: flex; align-items: center; gap: 6px; margin-top: 2px;">
+                                ${topProduct?.imageUrl ? `<img src="${topProduct.imageUrl}" style="width: 22px; height: 22px; border-radius: 4px; object-fit: cover;" />` : ''}
+                                <div>
+                                    <span id="shopify-stat-topprod-title" style="font-size: 13px; font-weight: 700; color: #16081e; display: block; line-height: 1.1;" title="${topProduct?.title || ''}">${topProductTitle}</span>
+                                    <span id="shopify-stat-topprod-sub" style="font-size: 10px; color: #70647a; font-weight: 500;">${topProductSub}</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     
@@ -440,6 +458,12 @@
                 badgeEl.innerHTML = statusText;
                 badgeEl.style.backgroundColor = badgeColor;
             }
+
+            const topProdTitleEl = panel.querySelector('#shopify-stat-topprod-title');
+            if (topProdTitleEl) topProdTitleEl.textContent = topProductTitle;
+
+            const topProdSubEl = panel.querySelector('#shopify-stat-topprod-sub');
+            if (topProdSubEl) topProdSubEl.textContent = topProductSub;
         }
         return true;
     }
@@ -607,6 +631,63 @@
         return sum;
     }
 
+    function extractLineItemsFromObj(node) {
+        const items = [];
+        function walk(obj) {
+            if (!obj || typeof obj !== 'object') return;
+            if (Array.isArray(obj)) {
+                obj.forEach(walk);
+                return;
+            }
+            if (obj.lineItem && typeof obj.lineItem === 'object') {
+                const item = obj.lineItem;
+                const title = item.title || item.presentmentName || item.presentmentTitle || item.name;
+                const quantity = item.quantity !== undefined ? parseInt(item.quantity, 10) : 1;
+                const price = item.currentTotalPrice?.amount || item.price?.amount || item.totalPriceWithDiscounts?.amount || 0;
+                const imgUrl = item.image?.url || null;
+
+                if (title && typeof title === 'string') {
+                    items.push({
+                        title: title.trim(),
+                        quantity: !isNaN(quantity) ? quantity : 1,
+                        price: !isNaN(parseFloat(price)) ? parseFloat(price) : 0,
+                        imageUrl: imgUrl
+                    });
+                }
+            }
+            for (const k in obj) {
+                if (obj[k] && typeof obj[k] === 'object') walk(obj[k]);
+            }
+        }
+        walk(node);
+        return items;
+    }
+
+    function getTopProducts(ordersMap) {
+        const map = {};
+        for (const key in ordersMap) {
+            const order = ordersMap[key];
+            if (Array.isArray(order.items)) {
+                order.items.forEach(it => {
+                    if (!map[it.title]) {
+                        map[it.title] = {
+                            title: it.title,
+                            quantity: 0,
+                            totalSpent: 0,
+                            imageUrl: it.imageUrl
+                        };
+                    }
+                    map[it.title].quantity += it.quantity;
+                    map[it.title].totalSpent += it.price;
+                    if (it.imageUrl && !map[it.title].imageUrl) {
+                        map[it.title].imageUrl = it.imageUrl;
+                    }
+                });
+            }
+        }
+        return Object.values(map).sort((a, b) => b.quantity - a.quantity);
+    }
+
     function extractOrdersFromObj(obj, uniqueOrders, isDetailResponse = false) {
         if (!obj || typeof obj !== 'object') return false;
         let updated = false;
@@ -646,7 +727,10 @@
             const discountCode = findDeepDiscountCode(obj);
             const discountAmount = findDeepDiscountAmount(obj);
 
-            const hasDetailInfo = isDetailResponse || discountCode !== null || discountAmount > 0 || priceBeforeNum !== null;
+            const extractedItems = extractLineItemsFromObj(obj);
+            const combinedItems = (extractedItems.length > 0) ? extractedItems : (existing.items || null);
+
+            const hasDetailInfo = isDetailResponse || discountCode !== null || discountAmount > 0 || priceBeforeNum !== null || (combinedItems && combinedItems.length > 0);
 
             uniqueOrders[targetKey] = {
                 price: priceNum,
@@ -656,7 +740,8 @@
                 discountCode: discountCode || existing.discountCode || null,
                 gid: gid || existing.gid || null,
                 detailFetched: hasDetailInfo ? true : (existing.detailFetched || false),
-                verifiedNoDiscount: isDetailResponse ? true : (existing.verifiedNoDiscount || false)
+                verifiedNoDiscount: isDetailResponse ? true : (existing.verifiedNoDiscount || false),
+                items: combinedItems
             };
             updated = true;
             return updated;
@@ -713,6 +798,41 @@
                 }
               }
               discountInformation { title discountValue { amount currencyCode } }
+            }
+          }
+        }
+      }
+    }
+  }
+}`;
+
+    const LINE_ITEMS_QUERY = `query LineItems($orderId: ID!, $lineItemsFirst: Int! = 250, $redacted: Boolean = false, $skipCompareAtPricing: Boolean = true, $skipOnlineStoreUrl: Boolean = false) {
+  order(id: $orderId) {
+    id
+    lineItems: lineItemContainers {
+      ... on RemainingLineItemContainer {
+        id
+        lineItems(first: $lineItemsFirst) {
+          nodes {
+            id
+            lineItem {
+              id
+              presentmentName
+              title
+              presentmentTitle
+              quantity
+              currentTotalPrice: totalPriceWithDiscounts { amount currencyCode }
+              totalPriceBeforeDiscounts: totalPriceBeforeDiscounts { amount currencyCode }
+              discountAllocations {
+                allocatedAmount { amount currencyCode }
+                discountApplication {
+                  ... on AutomaticDiscountApplication { title }
+                  ... on DiscountCodeApplication { code }
+                  ... on ManualDiscountApplication { title }
+                }
+              }
+              discountInformation { title discountValue { amount currencyCode } }
+              image { url altText }
             }
           }
         }
@@ -814,6 +934,41 @@
                             }
                         }
                     } catch (e2) { }
+                }
+
+                // Estrategia 3: GraphQL LineItems directo para extraer productos y descuentos si Estrategia 1 y 2 no bastaron
+                if (!fetchedSuccess) {
+                    try {
+                        const resp = await targetWindow.fetch(graphqlUrl + '?operation=LineItems', {
+                            method: 'POST',
+                            credentials: 'include',
+                            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                            body: JSON.stringify({
+                                operationName: 'LineItems',
+                                variables: {
+                                    orderId: item.gid,
+                                    lineItemsFirst: 250,
+                                    redacted: false,
+                                    skipCompareAtPricing: true,
+                                    skipOnlineStoreUrl: false
+                                },
+                                query: LINE_ITEMS_QUERY
+                            })
+                        });
+
+                        if (resp.ok) {
+                            const resJson = await resp.json();
+                            if (resJson?.data?.order && !resJson.data.order.name) {
+                                resJson.data.order.name = item.name;
+                            }
+                            let currentOrders = getStoredOrders();
+                            if (extractOrdersFromObj(resJson, currentOrders, true)) {
+                                if (currentOrders[item.name]) currentOrders[item.name].detailFetched = true;
+                                saveStoredOrders(currentOrders);
+                                fetchedSuccess = true;
+                            }
+                        }
+                    } catch (e3) { }
                 }
 
                 // Marcar detailFetched = true para garantizar progreso
