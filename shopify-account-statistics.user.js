@@ -20,16 +20,35 @@
     let hasMorePagesDetected = false;
     let isFullySynced = false;
 
-    function loadFontAwesome() {
-        if (!document.getElementById('shopify-fa-css') && document.head) {
-            const link = document.createElement('link');
-            link.id = 'shopify-fa-css';
-            link.rel = 'stylesheet';
-            link.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css';
-            document.head.appendChild(link);
+    const SVG_ICONS = {
+        boxes: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>`,
+        wallet: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1v-3"/><path d="M15 12h6v4h-6z"/></svg>`,
+        receipt: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1Z"/><path d="M8 7h8"/><path d="M8 11h8"/><path d="M8 15h5"/></svg>`,
+        piggy: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h3v-2h4v2h3v-3.5c1.7-1.2 2-2.7 2-4.5 0-2.5 0-4.5-2-4.5h-1"/><circle cx="7" cy="11" r="1"/></svg>`,
+        chart: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="m3 3 7 7 4-4 7 7"/><path d="M14 13h7v7"/></svg>`,
+        check: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>`,
+        spin: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="shopify-spin-icon" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>`,
+        cloudDown: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M4 14.89 4.13 14c.48-3.32 3.32-6 6.87-6 2.56 0 4.83 1.39 6.06 3.44.22-.04.44-.06.67-.06 2.49 0 4.5 2.01 4.5 4.5 0 2.37-1.83 4.31-4.16 4.49"/><path d="m12 12v9"/><path d="m8 17 4 4 4-4"/></svg>`,
+        refresh: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>`,
+        trash: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>`,
+        calendar: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;color:#6b21a8;"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>`,
+        tags: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;color:#6b21a8;"><path d="M12 2H2v10l11.29 11.29a1 1 0 0 0 1.41 0l7.58-7.58a1 1 0 0 0 0-1.41L12 2Z"/><circle cx="7" cy="7" r="1.5"/></svg>`,
+        tagInline: `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-left:2px;margin-right:2px;"><path d="M12 2H2v10l11.29 11.29a1 1 0 0 0 1.41 0l7.58-7.58a1 1 0 0 0 0-1.41L12 2Z"/><circle cx="7" cy="7" r="1.5"/></svg>`,
+        arrowUp: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>`,
+        arrowDown: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>`,
+        alert: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>`,
+        search: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>`
+    };
+
+    function injectSpinStyles() {
+        if (!document.getElementById('shopify-spin-style') && document.head) {
+            const style = document.createElement('style');
+            style.id = 'shopify-spin-style';
+            style.textContent = `@keyframes shopifySpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .shopify-spin-icon { animation: shopifySpin 0.9s linear infinite; }`;
+            document.head.appendChild(style);
         }
     }
-    loadFontAwesome();
+    injectSpinStyles();
 
     function formatCurrency(amount) {
         return new Intl.NumberFormat('es-CO', {
@@ -223,7 +242,7 @@
                 <option value="without_discount" ${currentDiscountFilter === 'without_discount' ? 'selected' : ''}>Sin descuento</option>
             `;
             discountCodes.forEach(code => {
-                discountOptionsHtml += `<option value="${code}" ${currentDiscountFilter === code ? 'selected' : ''}>🏷️ ${code}</option>`;
+                discountOptionsHtml += `<option value="${code}" ${currentDiscountFilter === code ? 'selected' : ''}>${code}</option>`;
             });
 
             panel.innerHTML = `
@@ -231,31 +250,31 @@
                     <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; flex: 1;">
                         <div style="min-width: 90px;">
                             <span style="font-size: 11px; color: #70647a; display: flex; align-items: center; gap: 4px; font-weight: 500; text-transform: uppercase;">
-                                <i class="fa-solid fa-boxes-stacked" style="color: #70647a;"></i> Órdenes
+                                ${SVG_ICONS.boxes} Órdenes
                             </span>
                             <span id="shopify-stat-count" style="font-size: 17px; font-weight: 700; color: #16081e;">${count}</span>
                         </div>
                         <div style="min-width: 130px;">
                             <span style="font-size: 11px; color: #70647a; display: flex; align-items: center; gap: 4px; font-weight: 500; text-transform: uppercase;">
-                                <i class="fa-solid fa-wallet" style="color: #70647a;"></i> Total Gastado
+                                ${SVG_ICONS.wallet} Total Gastado
                             </span>
                             <span id="shopify-stat-total" style="font-size: 17px; font-weight: 700; color: #16081e;">${totalSpentFormatted}</span>
                         </div>
                         <div style="min-width: 130px;">
                             <span style="font-size: 11px; color: #70647a; display: flex; align-items: center; gap: 4px; font-weight: 500; text-transform: uppercase;">
-                                <i class="fa-solid fa-receipt" style="color: #70647a;"></i> Sin Descuento
+                                ${SVG_ICONS.receipt} Sin Descuento
                             </span>
                             <span id="shopify-stat-gross" style="font-size: 17px; font-weight: 700; color: #555555;">${totalGrossFormatted}</span>
                         </div>
                         <div style="min-width: 130px;">
                             <span style="font-size: 11px; color: #2e7d32; display: flex; align-items: center; gap: 4px; font-weight: 600; text-transform: uppercase;">
-                                <i class="fa-solid fa-piggy-bank" style="color: #2e7d32;"></i> Total Ahorrado
+                                ${SVG_ICONS.piggy} Total Ahorrado
                             </span>
                             <span id="shopify-stat-savings" style="font-size: 17px; font-weight: 700; color: #2e7d32;">${totalSavingsFormatted}</span>
                         </div>
                         <div style="min-width: 120px;">
                             <span style="font-size: 11px; color: #70647a; display: flex; align-items: center; gap: 4px; font-weight: 500; text-transform: uppercase;">
-                                <i class="fa-solid fa-chart-line" style="color: #70647a;"></i> Promedio
+                                ${SVG_ICONS.chart} Promedio
                             </span>
                             <span id="shopify-stat-avg" style="font-size: 17px; font-weight: 700; color: #16081e;">${avgFormatted}</span>
                         </div>
@@ -267,15 +286,15 @@
                         </span>
                         ${statusText.includes('parcial') && !isAutoLoadingAll ? `
                             <button id="shopify-btn-load-all" style="padding: 5px 10px; border-radius: 6px; border: 1px solid ${themeColor}; background: #ffffff; color: #16081e; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
-                                <i class="fa-solid fa-cloud-arrow-down"></i> Cargar todos
+                                ${SVG_ICONS.cloudDown} Cargar todos
                             </button>
                         ` : ''}
                         ${!statusText.includes('parcial') && !isAutoLoadingAll ? `
                             <button id="shopify-btn-force-refresh" style="padding: 5px 10px; border-radius: 6px; border: 1px solid ${themeColor}; background: #ffffff; color: #16081e; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
-                                <i class="fa-solid fa-rotate ${isSyncingDetails ? 'fa-spin' : ''}"></i> ${isSyncingDetails ? 'Sincronizando...' : 'Actualizar'}
+                                ${isSyncingDetails ? SVG_ICONS.spin : SVG_ICONS.refresh} ${isSyncingDetails ? 'Sincronizando...' : 'Actualizar'}
                             </button>
                             <button id="shopify-btn-clear-storage" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #d32f2f; background: #ffffff; color: #d32f2f; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
-                                <i class="fa-solid fa-trash-can"></i> Borrar memoria
+                                ${SVG_ICONS.trash} Borrar memoria
                             </button>
                         ` : ''}
                     </div>
@@ -286,7 +305,7 @@
                     <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
                         <div style="display: flex; gap: 6px; align-items: center;">
                             <span style="font-size: 12px; font-weight: 600; color: #4a3e56; display: flex; align-items: center; gap: 4px;">
-                                <i class="fa-solid fa-calendar-days" style="color: #6b21a8;"></i> Fecha:
+                                ${SVG_ICONS.calendar} Fecha:
                             </span>
                             <select id="shopify-filter-mode-select" style="padding: 5px 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 11px; font-family: inherit; background: #fff; cursor: pointer;">
                                 <option value="all" ${currentFilterMode === 'all' ? 'selected' : ''}>Todas</option>
@@ -304,7 +323,7 @@
 
                         <div style="display: flex; gap: 6px; align-items: center;">
                             <span style="font-size: 12px; font-weight: 600; color: #4a3e56; display: flex; align-items: center; gap: 4px;">
-                                <i class="fa-solid fa-tags" style="color: #6b21a8;"></i> Descuentos:
+                                ${SVG_ICONS.tags} Descuentos:
                             </span>
                             <select id="shopify-filter-discount-select" style="padding: 5px 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 11px; font-family: inherit; background: #fff; cursor: pointer;">
                                 ${discountOptionsHtml}
@@ -314,10 +333,10 @@
 
                     <div style="display: flex; gap: 8px; align-items: center;">
                         <button id="shopify-btn-first-order-panel" style="padding: 5px 10px; border-radius: 20px; border: 1px solid ${themeColor}; background: #f8f5fb; color: #16081e; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
-                            <i class="fa-solid fa-arrow-up"></i> Pedido más reciente
+                            ${SVG_ICONS.arrowUp} Pedido más reciente
                         </button>
                         <button id="shopify-btn-last-order-panel" style="padding: 5px 10px; border-radius: 20px; border: 1px solid ${themeColor}; background: #f8f5fb; color: #16081e; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
-                            <i class="fa-solid fa-arrow-down"></i> Pedido más antiguo
+                            ${SVG_ICONS.arrowDown} Pedido más antiguo
                         </button>
                     </div>
                 </div>
@@ -800,7 +819,7 @@
             if (orderId && ordersMap[orderId]) {
                 const orderInfo = ordersMap[orderId];
                 const formattedDate = orderInfo.date ? formatOrderDate(orderInfo.date) : '';
-                const discountCode = orderInfo.discountCode ? ` · 🏷️ ${orderInfo.discountCode}` : '';
+                const discountCode = orderInfo.discountCode ? ` · ${SVG_ICONS.tagInline} ${orderInfo.discountCode}` : '';
 
                 // Número consecutivo de pedido: #547 para el más reciente de arriba, descendiendo hasta #1
                 const orderIndexNum = totalAllOrders - index;
@@ -996,32 +1015,32 @@
         const isNewestInCache = newestDomOrderId && ordersMap[newestDomOrderId];
         const pagBtn = getPaginationButton();
 
-        let statusLabel = '<i class="fa-solid fa-circle-check"></i> Sincronizado';
+        let statusLabel = `${SVG_ICONS.check} Sincronizado`;
         let statusBgColor = '#2e7d32'; // verde
 
         if (isAutoLoadingAll) {
-            statusLabel = '<i class="fa-solid fa-rotate fa-spin"></i> Sincronizando...';
+            statusLabel = `${SVG_ICONS.spin} Sincronizando...`;
             statusBgColor = '#0288d1'; // azul
             isFullySynced = false;
         } else if (isSyncingDetails && pendingSyncTotal > 0) {
-            statusLabel = `<i class="fa-solid fa-rotate fa-spin"></i> Descuentos (${pendingSyncCurrent} de ${pendingSyncTotal})`;
+            statusLabel = `${SVG_ICONS.spin} Descuentos (${pendingSyncCurrent} de ${pendingSyncTotal})`;
             statusBgColor = '#0288d1'; // azul
             isFullySynced = false;
         } else if (currentFilterMode !== 'all' || currentDiscountFilter !== 'all') {
             const filteredIds = filterOrders(ordersMap);
-            statusLabel = `<i class="fa-solid fa-magnifying-glass"></i> Filtrando (${filteredIds.length} de ${totalAllOrders})`;
+            statusLabel = `${SVG_ICONS.search} Filtrando (${filteredIds.length} de ${totalAllOrders})`;
             statusBgColor = '#7b1fa2'; // morado
             isFullySynced = isNewestInCache;
         } else if (totalAllOrders === 0) {
-            statusLabel = '<i class="fa-solid fa-rotate fa-spin"></i> Sincronizando...';
+            statusLabel = `${SVG_ICONS.spin} Sincronizando...`;
             statusBgColor = '#0288d1';
             isFullySynced = false;
         } else if (!isNewestInCache && pagBtn) {
-            statusLabel = '<i class="fa-solid fa-triangle-exclamation"></i> Sincronización parcial';
+            statusLabel = `${SVG_ICONS.alert} Sincronización parcial`;
             statusBgColor = '#e65100';
             isFullySynced = false;
         } else {
-            statusLabel = '<i class="fa-solid fa-circle-check"></i> Sincronizado';
+            statusLabel = `${SVG_ICONS.check} Sincronizado`;
             statusBgColor = '#2e7d32';
             isFullySynced = true;
         }
