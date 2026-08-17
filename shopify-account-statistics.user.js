@@ -550,7 +550,9 @@
     function findDeepDiscountAmount(obj) {
         if (!obj || typeof obj !== 'object') return 0;
         let sum = 0;
-        if (obj.totalSavings?.amount) return parseFloat(obj.totalSavings.amount);
+        if (obj.totalSavings?.amount && parseFloat(obj.totalSavings.amount) > 0) {
+            return parseFloat(obj.totalSavings.amount);
+        }
         if (Array.isArray(obj.discountAllocations)) {
             obj.discountAllocations.forEach(da => {
                 if (da.allocatedAmount?.amount) sum += parseFloat(da.allocatedAmount.amount);
@@ -572,7 +574,7 @@
         return sum;
     }
 
-    function extractOrdersFromObj(obj, uniqueOrders) {
+    function extractOrdersFromObj(obj, uniqueOrders, isDetailResponse = false) {
         if (!obj || typeof obj !== 'object') return false;
         let updated = false;
 
@@ -582,7 +584,7 @@
 
         if (Array.isArray(obj)) {
             obj.forEach(item => {
-                if (extractOrdersFromObj(item, uniqueOrders)) updated = true;
+                if (extractOrdersFromObj(item, uniqueOrders, isDetailResponse)) updated = true;
             });
             return updated;
         }
@@ -605,6 +607,8 @@
             const discountCode = findDeepDiscountCode(obj);
             const discountAmount = findDeepDiscountAmount(obj);
 
+            const hasDetailInfo = isDetailResponse || discountCode !== null || discountAmount > 0 || priceBeforeNum !== null;
+
             uniqueOrders[formattedName] = {
                 price: priceNum,
                 priceBeforeDiscounts: priceBeforeNum || existing.priceBeforeDiscounts || null,
@@ -612,7 +616,7 @@
                 date: date || existing.date || null,
                 discountCode: discountCode || existing.discountCode || null,
                 gid: gid || existing.gid || null,
-                detailFetched: true
+                detailFetched: hasDetailInfo ? true : (existing.detailFetched || false)
             };
             updated = true;
             return updated;
@@ -620,9 +624,10 @@
 
         for (const key in obj) {
             if (obj[key] && typeof obj[key] === 'object') {
-                if (extractOrdersFromObj(obj[key], uniqueOrders)) updated = true;
+                if (extractOrdersFromObj(obj[key], uniqueOrders, isDetailResponse)) updated = true;
             }
         }
+        return updated;
     }
 
     let isSyncingDetails = false;
@@ -718,7 +723,7 @@
                     }
 
                     let currentOrders = getStoredOrders();
-                    if (extractOrdersFromObj(resJson, currentOrders)) {
+                    if (extractOrdersFromObj(resJson, currentOrders, true)) {
                         if (currentOrders[item.name]) {
                             currentOrders[item.name].detailFetched = true;
                         }
