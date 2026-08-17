@@ -246,6 +246,29 @@
         return Object.values(paymentsMap).sort((a, b) => b.totalSpent - a.totalSpent);
     }
 
+    function slugifyTitle(title) {
+        if (!title || typeof title !== 'string') return '';
+        return title
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^\w\s-]/g, '')
+            .trim()
+            .replace(/\s+/g, '-');
+    }
+
+    function getFilteredOrdersMap() {
+        const allOrders = getStoredOrders();
+        const filteredIds = filterOrders(allOrders);
+        const filteredMap = {};
+        filteredIds.forEach(id => {
+            if (allOrders[id]) {
+                filteredMap[id] = allOrders[id];
+            }
+        });
+        return filteredMap;
+    }
+
     function openAnalyticsModal(ordersMap) {
         let modal = document.getElementById('shopify-analytics-modal');
         if (modal) modal.remove();
@@ -277,7 +300,7 @@
             top10RowsHtml = `<tr><td colspan="4" style="padding: 20px; text-align: center; color: #70647a;">Cargando/sin datos de productos...</td></tr>`;
         } else {
             top10.forEach((p, idx) => {
-                const prodLink = p.url || `/search?q=${encodeURIComponent(p.title)}`;
+                const prodLink = p.url || `/products/${slugifyTitle(p.title)}`;
                 const imgHtml = p.imageUrl ? `<img src="${p.imageUrl}" style="width: 36px; height: 36px; object-fit: cover; border-radius: 6px; border: 1px solid #e2d8ee;">` : `<div style="width: 36px; height: 36px; background: #f0ecf4; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px;">🛍️</div>`;
                 top10RowsHtml += `
                     <tr style="border-bottom: 1px solid #f0ecf4;">
@@ -424,8 +447,9 @@
         const themeColor = getShopifyBrandColor();
         const badgeColor = statusBgColor || themeColor;
         const ordersMap = getStoredOrders();
+        const filteredOrdersMap = getFilteredOrdersMap();
         const discountCodes = getCapturedDiscountCodes(ordersMap);
-        const topProducts = getTopProducts(ordersMap);
+        const topProducts = getTopProducts(filteredOrdersMap);
         const topProduct = topProducts.length > 0 ? topProducts[0] : null;
         const topProductTitle = topProduct ? (topProduct.title.length > 22 ? topProduct.title.substring(0, 22) + '...' : topProduct.title) : 'Sin datos';
         const topProductSub = topProduct ? `${topProduct.quantity} und. · ${formatCurrency(topProduct.totalSpent)}` : 'Sincronizando...';
@@ -653,12 +677,12 @@
             if (btnLast) btnLast.onclick = () => scrollToOrder('last');
 
             const btnOpenModal = document.getElementById('shopify-btn-open-modal');
-            if (btnOpenModal) btnOpenModal.onclick = () => openAnalyticsModal(ordersMap);
+            if (btnOpenModal) btnOpenModal.onclick = () => openAnalyticsModal(getFilteredOrdersMap());
 
             const topProdCard = document.getElementById('shopify-stat-card-topprod');
             if (topProdCard) {
                 topProdCard.style.cursor = 'pointer';
-                topProdCard.onclick = () => openAnalyticsModal(ordersMap);
+                topProdCard.onclick = () => openAnalyticsModal(getFilteredOrdersMap());
             }
 
             const btnLoadAll = document.getElementById('shopify-btn-load-all');
@@ -1067,7 +1091,8 @@
                 extractedNote = obj.customAttributes.map(a => `${a.key}: ${a.value}`).join(' | ');
             }
             const note = extractedNote || existing.note || null;
-            const paymentMethod = extractPaymentMethodFromObj(obj) || existing.paymentMethod || null;
+            const extractedPaymentMethod = extractPaymentMethodFromObj(obj);
+            const paymentMethod = extractedPaymentMethod || (existing.paymentMethod && existing.paymentMethod !== 'CARD' ? existing.paymentMethod : null);
 
             const hasDetailInfo = isDetailResponse || discountCode !== null || discountAmount > 0 || priceBeforeNum !== null || (combinedItems && combinedItems.length > 0);
 
