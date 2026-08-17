@@ -328,7 +328,7 @@
                         <td style="padding: 10px 12px; font-weight: 700; color: #b45309; font-size: 13px; display: flex; align-items: center; gap: 6px;">
                             ${SVG_ICONS.tagInline} ${d.code}
                         </td>
-                        <td style="padding: 10px 12px; text-align: center; font-weight: 600; font-size: 13px; color: #16081e;">${d.count} pedido(s)</td>
+                        <td style="padding: 10px 12px; text-align: center; font-weight: 600; font-size: 13px; color: #16081e;">${d.count} ${d.count === 1 ? 'pedido' : 'pedidos'}</td>
                         <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #2e7d32; font-size: 13px;">${formatCurrency(d.totalSaved)} ahorrado</td>
                     </tr>
                 `;
@@ -345,7 +345,7 @@
                         <td style="padding: 10px 12px; font-weight: 600; color: #1d4ed8; font-size: 13px; display: flex; align-items: center; gap: 6px;">
                             ${SVG_ICONS.card} ${pm.method}
                         </td>
-                        <td style="padding: 10px 12px; text-align: center; font-weight: 600; font-size: 13px; color: #16081e;">${pm.count} pedido(s)</td>
+                        <td style="padding: 10px 12px; text-align: center; font-weight: 600; font-size: 13px; color: #16081e;">${pm.count} ${pm.count === 1 ? 'pedido' : 'pedidos'}</td>
                         <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #16081e; font-size: 13px;">${formatCurrency(pm.totalSpent)}</td>
                     </tr>
                 `;
