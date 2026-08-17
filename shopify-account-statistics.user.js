@@ -1367,7 +1367,6 @@
             isSyncingDetails = false;
             pendingSyncTotal = 0;
             pendingSyncCurrent = 0;
-            updateDashboard();
         }
     }
 
@@ -1750,11 +1749,26 @@
         });
     }
 
-    function updateDashboard() {
+    let lastDashboardStateHash = '';
+
+    function updateDashboard(forceRender = false) {
         scanDOMOrders();
 
         const ordersMap = getStoredOrders();
         const totalAllOrders = Object.keys(ordersMap).length;
+        const filteredIds = filterOrders(ordersMap);
+
+        const currentHash = `${filteredIds.length}_${totalAllOrders}_${currentFilterMode}_${currentDiscountFilter}_${isSyncingDetails}_${pendingSyncCurrent}_${userStoppedSync}`;
+
+        if (!forceRender && currentHash === lastDashboardStateHash && document.getElementById('shopify-top-analytics-panel')) {
+            injectDatesIntoDOM();
+            if (!userStoppedSync && !isSyncingDetails) {
+                syncMissingOrderDetails();
+            }
+            return;
+        }
+
+        lastDashboardStateHash = currentHash;
 
         // Validar si el pedido más reciente del DOM ya está en la memoria local (localStorage)
         const articles = document.querySelectorAll('article');
@@ -1782,7 +1796,6 @@
             statusBgColor = '#0288d1'; // azul
             isFullySynced = false;
         } else if (currentFilterMode !== 'all' || currentDiscountFilter !== 'all') {
-            const filteredIds = filterOrders(ordersMap);
             statusLabel = `${SVG_ICONS.search} Filtrando (${filteredIds.length} de ${totalAllOrders})`;
             statusBgColor = '#7b1fa2'; // morado
             isFullySynced = isNewestInCache;
@@ -1800,7 +1813,6 @@
             isFullySynced = true;
         }
 
-        const filteredIds = filterOrders(ordersMap);
         const orderCount = filteredIds.length;
 
         let totalSpent = 0;
@@ -1861,6 +1873,6 @@
 
     setInterval(() => {
         updateDashboard();
-    }, 1500);
+    }, 3000);
 
 })();
