@@ -381,7 +381,32 @@
     function getStoredOrders() {
         try {
             const data = localStorage.getItem(STORAGE_KEY);
-            return data ? JSON.parse(data) : {};
+            if (!data) return {};
+            const parsed = JSON.parse(data);
+            const cleaned = {};
+
+            for (const key in parsed) {
+                if (!key) continue;
+                let cleanKey = key.trim();
+                if (!cleanKey.startsWith('#') && (cleanKey.startsWith('CJ') || /^\d+$/.test(cleanKey))) {
+                    cleanKey = `#${cleanKey}`;
+                }
+
+                const item = parsed[key];
+                const price = typeof item === 'object' && item !== null ? parseFloat(item.price) : parseFloat(item);
+                const date = typeof item === 'object' && item !== null ? item.date : null;
+
+                if (!isNaN(price)) {
+                    if (!cleaned[cleanKey]) {
+                        cleaned[cleanKey] = { price, date };
+                    } else {
+                        if (!cleaned[cleanKey].date && date) {
+                            cleaned[cleanKey].date = date;
+                        }
+                    }
+                }
+            }
+            return cleaned;
         } catch (e) {
             return {};
         }
@@ -405,29 +430,32 @@
             obj.forEach(item => {
                 if (extractOrdersFromObj(item, uniqueOrders)) updated = true;
             });
-        } else {
-            const name = obj.name || obj.orderNumber || obj.id;
-            const amount = obj.totalPrice?.amount || obj.currentTotalPrice?.amount || obj.totalPrice || obj.total;
-            const date = obj.processedAt || obj.createdAt || obj.processed_at || obj.created_at;
+            return updated;
+        }
 
-            if (name && typeof name === 'string' && (name.startsWith('#') || name.startsWith('CJ')) && amount !== undefined) {
-                const priceNum = parseFloat(amount);
-                if (!isNaN(priceNum)) {
-                    const formattedName = name.startsWith('#') ? name : `#${name}`;
-                    if (!uniqueOrders[formattedName] || (!uniqueOrders[formattedName].date && date)) {
-                        uniqueOrders[formattedName] = {
-                            price: priceNum,
-                            date: date || uniqueOrders[formattedName]?.date || null
-                        };
-                        updated = true;
-                    }
+        const name = obj.name || obj.orderNumber;
+        const amount = obj.totalPrice?.amount || obj.currentTotalPrice?.amount || obj.totalPrice || obj.total;
+        const date = obj.processedAt || obj.createdAt || obj.processed_at || obj.created_at;
+
+        if (name && typeof name === 'string' && (name.startsWith('#') || name.startsWith('CJ')) && amount !== undefined) {
+            const priceNum = typeof amount === 'object' ? parseFloat(amount.amount) : parseFloat(amount);
+            if (!isNaN(priceNum)) {
+                const formattedName = name.startsWith('#') ? name.trim() : `#${name.trim()}`;
+                if (!uniqueOrders[formattedName] || (!uniqueOrders[formattedName].date && date)) {
+                    uniqueOrders[formattedName] = {
+                        price: priceNum,
+                        date: date || uniqueOrders[formattedName]?.date || null
+                    };
+                    updated = true;
                 }
             }
+            // Evitar recursión profunda dentro de las propiedades internas de una orden ya identificada
+            return updated;
+        }
 
-            for (const key in obj) {
-                if (obj[key] && typeof obj[key] === 'object') {
-                    if (extractOrdersFromObj(obj[key], uniqueOrders)) updated = true;
-                }
+        for (const key in obj) {
+            if (obj[key] && typeof obj[key] === 'object') {
+                if (extractOrdersFromObj(obj[key], uniqueOrders)) updated = true;
             }
         }
         return updated;
