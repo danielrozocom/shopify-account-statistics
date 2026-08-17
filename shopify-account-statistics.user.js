@@ -19,9 +19,40 @@
     let isAutoLoadingAll = false;
     let hasMorePagesDetected = false;
     let isFullySynced = false;
+    let isSyncCancelled = false;
 
     function logAnalytics(msg, ...args) {
         console.log(`%c[Shopify Analytics] ${msg}`, 'color: #9333ea; font-weight: bold;', ...args);
+    }
+
+    async function parseResponseSafely(resp) {
+        if (!resp) return null;
+        try {
+            const text = await resp.text();
+            if (!text || text.trim().length === 0) return null;
+
+            if (text.trim().startsWith('{') || text.trim().startsWith('[')) {
+                try {
+                    return JSON.parse(text);
+                } catch (e) { }
+            }
+
+            const remixMatch = text.match(/window\.__remixContext\s*=\s*(\{.*?\});\s*<\/script>/s);
+            if (remixMatch) {
+                try {
+                    return JSON.parse(remixMatch[1]);
+                } catch (e) { }
+            }
+
+            const scriptJsonMatches = [...text.matchAll(/<script[^>]*type="application\/json"[^>]*>(.*?)<\/script>/gs)];
+            for (const m of scriptJsonMatches) {
+                try {
+                    const json = JSON.parse(m[1]);
+                    if (json && typeof json === 'object') return json;
+                } catch (e) { }
+            }
+        } catch (err) { }
+        return null;
     }
 
     const SVG_ICONS = {
@@ -316,6 +347,11 @@
                             <button id="shopify-btn-force-refresh" style="padding: 5px 10px; border-radius: 6px; border: 1px solid ${themeColor}; background: #ffffff; color: #16081e; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
                                 ${isSyncingDetails ? SVG_ICONS.spin : SVG_ICONS.refresh} ${isSyncingDetails ? 'Sincronizando...' : 'Actualizar'}
                             </button>
+                            ${isSyncingDetails ? `
+                                <button id="shopify-btn-stop-sync" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #d32f2f; background: #fff0f0; color: #d32f2f; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                                    ${SVG_ICONS.trash} Detener
+                                </button>
+                            ` : ''}
                             <button id="shopify-btn-clear-storage" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #d32f2f; background: #ffffff; color: #d32f2f; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
                                 ${SVG_ICONS.trash} Borrar memoria
                             </button>
@@ -410,9 +446,20 @@
             const btnLoadAll = document.getElementById('shopify-btn-load-all');
             if (btnLoadAll) btnLoadAll.onclick = () => loadAllOrders();
 
+            const btnStopSync = document.getElementById('shopify-btn-stop-sync');
+            if (btnStopSync) {
+                btnStopSync.onclick = () => {
+                    isSyncCancelled = true;
+                    isSyncingDetails = false;
+                    updateDashboard();
+                    logAnalytics('🛑 Sincronización detenida por el usuario.');
+                };
+            }
+
             const btnForceRefresh = document.getElementById('shopify-btn-force-refresh');
             if (btnForceRefresh) {
                 btnForceRefresh.onclick = async () => {
+                    isSyncCancelled = false;
                     isSyncingDetails = false; // Reset lock
                     let currentOrders = getStoredOrders();
                     for (const k in currentOrders) {
@@ -883,6 +930,7 @@
         }
 
         isSyncingDetails = true;
+        isSyncCancelled = false;
         pendingSyncTotal = pendingList.length;
         pendingSyncCurrent = 0;
 
@@ -903,6 +951,11 @@
 
         try {
             for (let i = 0; i < pendingList.length; i++) {
+                if (isSyncCancelled) {
+                    logAnalytics('🛑 Sincronización detenida por el usuario.');
+                    break;
+                }
+
                 pendingSyncCurrent = i + 1;
                 const item = pendingList[i];
                 logAnalytics(`🔄 [${i + 1}/${pendingList.length}] Consultando detalles, productos y notas de:`, item.name);
@@ -922,22 +975,24 @@
                     if (resp.status === 429) {
                         await new Promise(r => setTimeout(r, 1500));
                     } else if (resp.ok) {
-                        const resJson = await resp.json();
-                        if (resJson?.order && !resJson.order.name) {
-                            resJson.order.name = item.name;
-                        }
-                        let currentOrders = getStoredOrders();
-                        if (extractOrdersFromObj(resJson, currentOrders, true)) {
-                            if (currentOrders[item.name]) currentOrders[item.name].detailFetched = true;
-                            saveStoredOrders(currentOrders);
-                            fetchedSuccess = true;
-                            logAnalytics('✅ [Remix Loader] Sincronización nativa exitosa para:', item.name);
+                        const resJson = await parseResponseSafely(resp);
+                        if (resJson) {
+                            if (resJson?.order && !resJson.order.name) {
+                                resJson.order.name = item.name;
+                            }
+                            let currentOrders = getStoredOrders();
+                            if (extractOrdersFromObj(resJson, currentOrders, true)) {
+                                if (currentOrders[item.name]) currentOrders[item.name].detailFetched = true;
+                                saveStoredOrders(currentOrders);
+                                fetchedSuccess = true;
+                                logAnalytics('✅ [Remix Loader] Sincronización nativa exitosa para:', item.name);
+                            }
                         }
                     }
                 } catch (e1) { }
 
                 // Estrategia 2 (SECUNDARIA): GraphQL OrderDetails POST con token Authorization
-                if (!fetchedSuccess) {
+                if (!fetchedSuccess && authHeader) {
                     try {
                         const resp = await targetWindow.fetch(graphqlUrl + '?operation=OrderDetails', {
                             method: 'POST',
@@ -955,23 +1010,25 @@
                         if (resp.status === 429) {
                             await new Promise(r => setTimeout(r, 1500));
                         } else if (resp.ok) {
-                            const resJson = await resp.json();
-                            if (resJson?.data?.order && !resJson.data.order.name) {
-                                resJson.data.order.name = item.name;
-                            }
-                            let currentOrders = getStoredOrders();
-                            if (extractOrdersFromObj(resJson, currentOrders, true)) {
-                                if (currentOrders[item.name]) currentOrders[item.name].detailFetched = true;
-                                saveStoredOrders(currentOrders);
-                                fetchedSuccess = true;
-                                logAnalytics('✅ [GraphQL OrderDetails] Sincronización exitosa para:', item.name);
+                            const resJson = await parseResponseSafely(resp);
+                            if (resJson) {
+                                if (resJson?.data?.order && !resJson.data.order.name) {
+                                    resJson.data.order.name = item.name;
+                                }
+                                let currentOrders = getStoredOrders();
+                                if (extractOrdersFromObj(resJson, currentOrders, true)) {
+                                    if (currentOrders[item.name]) currentOrders[item.name].detailFetched = true;
+                                    saveStoredOrders(currentOrders);
+                                    fetchedSuccess = true;
+                                    logAnalytics('✅ [GraphQL OrderDetails] Sincronización exitosa para:', item.name);
+                                }
                             }
                         }
                     } catch (e2) { }
                 }
 
                 // Estrategia 3 (RESPALDO): GraphQL LineItems POST con token Authorization
-                if (!fetchedSuccess) {
+                if (!fetchedSuccess && authHeader) {
                     try {
                         const resp = await targetWindow.fetch(graphqlUrl + '?operation=LineItems', {
                             method: 'POST',
@@ -990,16 +1047,18 @@
                         if (resp.status === 429) {
                             await new Promise(r => setTimeout(r, 1500));
                         } else if (resp.ok) {
-                            const resJson = await resp.json();
-                            if (resJson?.data?.order && !resJson.data.order.name) {
-                                resJson.data.order.name = item.name;
-                            }
-                            let currentOrders = getStoredOrders();
-                            if (extractOrdersFromObj(resJson, currentOrders, true)) {
-                                if (currentOrders[item.name]) currentOrders[item.name].detailFetched = true;
-                                saveStoredOrders(currentOrders);
-                                fetchedSuccess = true;
-                                logAnalytics('✅ [GraphQL LineItems] Sincronización exitosa para:', item.name);
+                            const resJson = await parseResponseSafely(resp);
+                            if (resJson) {
+                                if (resJson?.data?.order && !resJson.data.order.name) {
+                                    resJson.data.order.name = item.name;
+                                }
+                                let currentOrders = getStoredOrders();
+                                if (extractOrdersFromObj(resJson, currentOrders, true)) {
+                                    if (currentOrders[item.name]) currentOrders[item.name].detailFetched = true;
+                                    saveStoredOrders(currentOrders);
+                                    fetchedSuccess = true;
+                                    logAnalytics('✅ [GraphQL LineItems] Sincronización exitosa para:', item.name);
+                                }
                             }
                         }
                     } catch (e3) { }
