@@ -85,7 +85,7 @@
         if (!document.getElementById('shopify-spin-style') && document.head) {
             const style = document.createElement('style');
             style.id = 'shopify-spin-style';
-            style.textContent = `@keyframes shopifySpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .shopify-spin-icon { animation: shopifySpin 0.9s linear infinite; }`;
+            style.textContent = `@keyframes shopifySpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .shopify-spin-icon { animation: shopifySpin 0.9s linear infinite; } @keyframes shopifyPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }`;
             document.head.appendChild(style);
         }
     }
@@ -222,12 +222,19 @@
             const order = ordersMap[key];
             if (order) {
                 let code = order.discountCode;
+                const discountType = order.discountType || null;
                 if (!code && (order.discountAmount && order.discountAmount > 0)) {
-                    code = 'Descuento Sin Nombre (Automático / Manual)';
+                    if (discountType === 'manual') {
+                        code = 'Descuento Sin Nombre (Manual)';
+                    } else if (discountType === 'automatic') {
+                        code = 'Descuento Sin Nombre (Automático)';
+                    } else {
+                        code = 'Descuento Sin Nombre (Automático / Manual)';
+                    }
                 }
                 if (code) {
                     if (!discountsMap[code]) {
-                        discountsMap[code] = { code: code, count: 0, totalSaved: 0 };
+                        discountsMap[code] = { code: code, count: 0, totalSaved: 0, type: discountType };
                     }
                     discountsMap[code].count += 1;
                     discountsMap[code].totalSaved += (order.discountAmount || 0);
@@ -241,7 +248,7 @@
         const paymentsMap = {};
         for (const key in ordersMap) {
             const order = ordersMap[key];
-            const method = order.paymentMethod || 'No especificado / Estándar';
+            const method = cleanPaymentMethodLabel(order.paymentMethod) || 'No especificado / Estándar';
             if (!paymentsMap[method]) {
                 paymentsMap[method] = { method: method, count: 0, totalSpent: 0 };
             }
@@ -314,70 +321,103 @@
 
                 let priceHistoryHtml = '';
                 if (p.hasPriceVariation) {
-                    priceHistoryHtml = `
-                        <span style="font-size: 11px; background: #fff3dc; color: #b45309; border: 1px solid #fef3c7; padding: 2px 6px; border-radius: 6px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
-                            📈 ${formatCurrency(p.minPrice)} - ${formatCurrency(p.maxPrice)}
-                        </span>
-                        ${p.dateRangeStr ? `<span style="font-size: 10px; color: #70647a; display: block; margin-top: 2px;">📅 ${p.dateRangeStr}</span>` : ''}
-                    `;
+                    const pct = p.minPrice > 0 ? (((p.maxPrice - p.minPrice) / p.minPrice) * 100).toFixed(1) : null;
+                    priceHistoryHtml = `<span style="font-size: 11px; font-weight: 700; color: #b45309; white-space: nowrap;">📈 ${formatCurrency(p.minPrice)} – ${formatCurrency(p.maxPrice)} ${pct ? `(+${pct}%)` : ''} <span style="color: #70647a; font-weight: 500;">/ und.</span></span>`;
                 } else if (p.minPrice > 0) {
-                    priceHistoryHtml = `
-                        <span style="font-size: 11px; color: #4a3e56; font-weight: 500;">${formatCurrency(p.minPrice)} / und.</span>
-                        ${p.dateRangeStr ? `<span style="font-size: 10px; color: #70647a; display: block; margin-top: 2px;">📅 ${p.dateRangeStr}</span>` : ''}
-                    `;
+                    priceHistoryHtml = `<span style="font-size: 11px; font-weight: 700; color: #16081e; white-space: nowrap;">${formatCurrency(p.minPrice)} <span style="color: #70647a; font-weight: 500;">/ und.</span></span>`;
                 } else {
-                    priceHistoryHtml = `<span style="font-size: 11px; color: #70647a;">-</span>`;
+                    priceHistoryHtml = `<span style="font-size: 11px; color: #70647a;">–</span>`;
                 }
+                const periodChipHtml = p.dateRangeStr ? `<span style="font-size: 10px; color: #70647a; background: #f8f5fb; border: 1px solid #e9ddf5; padding: 2px 8px; border-radius: 10px; white-space: nowrap;">📅 ${p.dateRangeStr}</span>` : '';
 
                 let variantBadgeHtml = '';
                 if (Array.isArray(p.variantList) && p.variantList.length > 0) {
                     const hasNonStandard = p.variantList.some(v => v.name !== 'Estándar');
                     if (hasNonStandard || p.variantList.length > 1) {
                         const itemsHtml = p.variantList.map(v => {
-                            let priceInfo = `${formatCurrency(v.minPrice)} / und.`;
-                            if (v.hasIncrease) {
-                                priceInfo = `<span style="color: #c2410c; font-weight: 700;">📈 ${formatCurrency(v.minPrice)} ➔ ${formatCurrency(v.maxPrice)} (+${v.increasePercent}%)</span>`;
-                            } else if (v.uniquePrices.length > 1) {
-                                priceInfo = `📈 ${formatCurrency(v.minPrice)} - ${formatCurrency(v.maxPrice)}`;
-                            }
                             const orderLabel = v.ordersCount === 1 ? '1 compra' : `${v.ordersCount} compras`;
-                            return `<div style="margin-top: 2px;">• <strong style="color: #6b21a8;">${v.name}</strong>: ${v.quantity} und. en ${orderLabel} (${formatCurrency(v.totalSpent)}) — ${priceInfo}</div>`;
+                            return `<span style="display: inline-flex; align-items: center; gap: 4px; background: #faf5ff; border: 1px solid #f3e8ff; border-radius: 8px; padding: 3px 8px; font-size: 11px; color: #4a3e56; white-space: nowrap;">🎨 <strong style="color: #6b21a8;">${v.name}</strong> · ${v.quantity} und. · ${orderLabel} · ${formatCurrency(v.totalSpent)}</span>`;
                         }).join('');
 
                         variantBadgeHtml = `
                             <div style="margin-top: 6px; padding: 6px 10px; background: #fcf9fe; border: 1px solid #f0e6f7; border-radius: 8px; font-size: 11px; color: #4a3e56; text-align: left;">
-                                <div style="font-weight: 700; color: #7e22ce; margin-bottom: 2px;">🎨 Desglose por Variante (${p.variantList.length}):</div>
-                                ${itemsHtml}
+                                <div style="font-weight: 700; color: #7e22ce; margin-bottom: 4px;">🎨 Desglose por Variante (${p.variantList.length}):</div>
+                                <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">${itemsHtml}</div>
                             </div>
                         `;
                     }
                 }
 
                 const historyRowId = `shopify-history-row-${idx}`;
+                const grouped = (Array.isArray(p.groupedHistory) && p.groupedHistory.length > 0) ? p.groupedHistory : null;
                 let historySubRowHtml = '';
-                if (Array.isArray(p.history) && p.history.length > 0) {
-                    const timelineCardsHtml = p.history.map((h, hIdx) => {
-                        const dateFormatted = formatDateShort(h.date) || 'Sin fecha';
-                        const paidStr = formatCurrency(h.unitPricePaid);
-                        const hasDiscount = h.unitPriceGross && h.unitPriceGross > (h.unitPricePaid + 1);
-                        const grossStr = hasDiscount ? formatCurrency(h.unitPriceGross) : paidStr;
-                        const savedStr = hasDiscount ? formatCurrency(h.unitPriceGross - h.unitPricePaid) : null;
+                if (grouped) {
+                    const timelineCardsHtml = grouped.map((g, gIdx) => {
+                        const paidStr = formatCurrency(g.unitPricePaid);
+                        const hasDiscount = g.discountAmount > 0;
+                        const grossStr = hasDiscount ? formatCurrency(g.unitPriceGross) : paidStr;
+                        const savedStr = hasDiscount ? formatCurrency(g.discountAmount) : null;
+                        const count = g.orders.length;
+                        const countLabel = count === 1 ? '1 compra' : `${count} compras`;
+
+                        const variantChip = g.variantName
+                            ? `<span style="color:${g.variantName === 'Estándar' ? '#70647a' : '#6b21a8'}; font-weight:600; background:${g.variantName === 'Estándar' ? '#f8f5fb' : '#faf5ff'}; border:1px solid ${g.variantName === 'Estándar' ? '#eee5f7' : '#f3e8ff'}; padding:1px 6px; border-radius:4px; white-space:nowrap;">🎨 ${g.variantName}</span>`
+                            : '';
+
+                        const orderLinks = g.orders.map(o => {
+                            const url = getOrderUrl(o.orderGid);
+                            return url
+                                ? `<a href="${url}" target="_blank" rel="noopener noreferrer" style="font-weight:700; color:#9333ea; background:#f3e8ff; padding:1px 6px; border-radius:6px; font-size:11px; text-decoration:none; white-space:nowrap;" onmouseover="this.style.textDecoration='underline';" onmouseout="this.style.textDecoration='none';">${o.orderName} ↗</a>`
+                                : `<span style="font-weight:700; color:#9333ea; background:#f3e8ff; padding:1px 6px; border-radius:6px; font-size:11px; white-space:nowrap;">${o.orderName}</span>`;
+                        }).join(' ');
+
+                        const dateStrs = g.dates.map(d => formatDateShort(d)).filter(Boolean);
+                        const dateLabel = dateStrs.length > 0
+                            ? (dateStrs.length === 1 ? dateStrs[0] : `${dateStrs[0]} ➔ ${dateStrs[dateStrs.length - 1]}`)
+                            : 'Sin fecha';
+
+                        let changeConnectorHtml = '';
+                        if (gIdx < grouped.length - 1) {
+                            const next = grouped[gIdx + 1];
+                            const curPrice = g.unitPricePaid;
+                            const nextPrice = next.unitPricePaid;
+                            const eps = 0.005;
+                            if (nextPrice > curPrice + eps) {
+                                const diff = nextPrice - curPrice;
+                                const pct = curPrice > 0 ? ((diff / curPrice) * 100).toFixed(1) : '0';
+                                changeConnectorHtml = `
+                                    <div style="display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0 0 2px 0; padding: 3px 8px; font-size: 11px; font-weight: 700; color: #c2410c; background: #fff7ed; border: 1px solid #ffedd5; border-radius: 8px; text-align: center;">
+                                        📈 El precio subió: ${formatCurrency(curPrice)} → ${formatCurrency(nextPrice)} / und. (+${pct}%)
+                                    </div>`;
+                            } else if (nextPrice < curPrice - eps) {
+                                const diff = curPrice - nextPrice;
+                                const pct = curPrice > 0 ? ((diff / curPrice) * 100).toFixed(1) : '0';
+                                changeConnectorHtml = `
+                                    <div style="display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0 0 2px 0; padding: 3px 8px; font-size: 11px; font-weight: 700; color: #2e7d32; background: #e9f7ef; border: 1px solid #c8ecd8; border-radius: 8px; text-align: center;">
+                                        📉 El precio bajó: ${formatCurrency(curPrice)} → ${formatCurrency(nextPrice)} / und. (-${pct}%)
+                                    </div>`;
+                            }
+                        }
 
                         return `
-                            <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; background: #ffffff; border: 1px solid #e9d5ff; border-radius: 8px; font-size: 11px; margin-bottom: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
-                                <div style="display: flex; align-items: center; gap: 10px;">
-                                    <span style="font-weight: 700; color: #9333ea; background: #f3e8ff; padding: 2px 8px; border-radius: 6px; font-size: 11px;">${h.orderName}</span>
-                                    <span style="color: #70647a; font-weight: 500;">📅 ${dateFormatted}</span>
-                                    ${h.variantName && h.variantName !== 'Estándar' ? `<span style="color: #6b21a8; font-weight: 600; background: #faf5ff; border: 1px solid #f3e8ff; padding: 1px 6px; border-radius: 4px;">${h.variantName}</span>` : ''}
+                            <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; background: #ffffff; border: 1px solid #e9d5ff; border-radius: 8px; font-size: 11px; margin-bottom: 2px; box-shadow: 0 1px 3px rgba(0,0,0,0.03); gap: 10px; flex-wrap: wrap;">
+                                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                    ${variantChip}
+                                    <span style="font-weight: 700; color: #2e7d32; background: #e9f7ef; border: 1px solid #c8ecd8; padding: 1px 6px; border-radius: 4px; white-space:nowrap;">× ${countLabel}</span>
+                                    <span style="color: #70647a; font-weight: 500; white-space:nowrap;">📅 ${dateLabel}</span>
                                 </div>
-                                <div style="text-align: right; display: flex; align-items: center; gap: 10px;">
+                                <div style="text-align: right; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                                     <div>
-                                        <span style="font-weight: 700; color: #2e7d32; font-size: 12px;">Pagado: ${paidStr}/und.</span>
-                                        ${hasDiscount ? `<span style="color: #70647a; font-size: 10px; text-decoration: line-through; margin-left: 6px;">${grossStr}</span>` : ''}
+                                        <span style="font-weight: 700; color: #2e7d32; font-size: 12px; white-space:nowrap;">Con desc.: ${paidStr}/und.</span>
+                                        ${hasDiscount ? `<span style="color: #70647a; font-size: 10px; text-decoration: line-through; margin-left: 6px; white-space:nowrap;">Sin desc.: ${grossStr}</span>` : ''}
                                     </div>
-                                    ${savedStr ? `<span style="background: #fef3c7; color: #b45309; border: 1px solid #fde68a; padding: 2px 8px; border-radius: 6px; font-weight: 600; font-size: 10px;">🎁 Ahorro ${savedStr} ${h.discountCode ? `(${h.discountCode})` : ''}</span>` : `<span style="color: #94a3b8; font-size: 10px;">(Sin descuento adicional)</span>`}
+                                    ${savedStr ? `<span style="background: #fef3c7; color: #b45309; border: 1px solid #fde68a; padding: 2px 8px; border-radius: 6px; font-weight: 600; font-size: 10px; white-space:nowrap;">🎁 Ahorro ${savedStr}/und. ${g.discountCode ? `(${g.discountCode})` : ''}</span>` : `<span style="color: #94a3b8; font-size: 10px;">Sin descuento</span>`}
                                 </div>
                             </div>
+                            <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 2px 12px 8px 12px; font-size: 11px; color: #4a3e56;">
+                                <span style="font-weight: 600;">Pedidos:</span> ${orderLinks}
+                            </div>
+                            ${changeConnectorHtml}
                         `;
                     }).join('');
 
@@ -398,9 +438,9 @@
                     `;
                 }
 
-                const toggleHistoryBtn = (p.history && p.history.length > 0) ? `
+                const toggleHistoryBtn = (grouped && grouped.length > 0) ? `
                     <button class="shopify-toggle-history-btn" data-target="${historyRowId}" style="background: #f8f5fb; color: #9333ea; border: 1px solid #e2d8ee; padding: 3px 8px; border-radius: 12px; font-size: 10px; font-weight: 600; cursor: pointer; margin-top: 4px; display: inline-flex; align-items: center; gap: 4px; transition: all 0.2s ease;" onmouseover="this.style.background='#9333ea'; this.style.color='#ffffff';" onmouseout="this.style.background='#f8f5fb'; this.style.color='#9333ea';">
-                        📜 Histórico Cronológico (${p.history.length})
+                        📜 Histórico de Precios (${grouped.length})
                     </button>
                 ` : '';
 
@@ -418,10 +458,12 @@
                         </td>
                         <td style="padding: 10px 12px; text-align: center; font-weight: 700; color: #16081e; font-size: 13px;">${p.quantity} und.</td>
                         <td style="padding: 10px 12px; text-align: center;">
-                            ${priceHistoryHtml}
-                            ${toggleHistoryBtn ? `<br>${toggleHistoryBtn}` : ''}
+                            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+                                <div>${priceHistoryHtml}</div>
+                                ${(periodChipHtml || toggleHistoryBtn) ? `<div style="display: flex; align-items: center; justify-content: center; gap: 4px; flex-wrap: wrap;">${periodChipHtml}${toggleHistoryBtn}</div>` : ''}
+                            </div>
                         </td>
-                        <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #2e7d32; font-size: 13px;">${formatCurrency(p.totalSpent)}</td>
+                        <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #2e7d32; font-size: 13px; white-space: nowrap;">${formatCurrency(p.totalSpent)}</td>
                     </tr>
                     ${historySubRowHtml}
                 `;
@@ -433,10 +475,16 @@
             discountRowsHtml = `<tr><td colspan="3" style="padding: 20px; text-align: center; color: #70647a;">No se registran cupones de descuento aplicados.</td></tr>`;
         } else {
             discountBreakdown.forEach((d) => {
+                let typeBadgeHtml = '';
+                if (d.type === 'manual') {
+                    typeBadgeHtml = `<span style="background: #ede9fe; color: #7c3aed; border: 1px solid #ddd6fe; padding: 2px 8px; border-radius: 999px; font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap;">${SVG_ICONS.tagInline} Manual</span>`;
+                } else if (d.type === 'automatic') {
+                    typeBadgeHtml = `<span style="background: #dbeafe; color: #1d4ed8; border: 1px solid #bfdbfe; padding: 2px 8px; border-radius: 999px; font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap;">${SVG_ICONS.tagInline} Automático</span>`;
+                }
                 discountRowsHtml += `
                     <tr style="border-bottom: 1px solid #f0ecf4;">
-                        <td style="padding: 10px 12px; font-weight: 700; color: #b45309; font-size: 13px; display: flex; align-items: center; gap: 6px;">
-                            ${SVG_ICONS.tagInline} ${d.code}
+                        <td style="padding: 10px 12px; font-weight: 700; color: #b45309; font-size: 13px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                            ${SVG_ICONS.tagInline} ${d.code} ${typeBadgeHtml}
                         </td>
                         <td style="padding: 10px 12px; text-align: center; font-weight: 600; font-size: 13px; color: #16081e;">${d.count} ${d.count === 1 ? 'pedido' : 'pedidos'}</td>
                         <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #2e7d32; font-size: 13px;">${formatCurrency(d.totalSaved)} ahorrado</td>
@@ -643,53 +691,53 @@
             });
 
             panel.innerHTML = `
-                <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: center; justify-content: space-between; width: 100%;">
-                    <div style="display: flex; gap: 18px; flex-wrap: wrap; align-items: center; flex: 1;">
-                        <div style="min-width: 80px;">
-                            <span style="font-size: 11px; color: #70647a; display: flex; align-items: center; gap: 4px; font-weight: 500; text-transform: uppercase;">
+                <div style="display: flex; flex-direction: column; gap: 12px; width: 100%;">
+                    <div style="display: flex; gap: 18px; flex-wrap: wrap; align-items: center; width: 100%;">
+                        <div style="min-width: 90px; background: #f3e8ff; border: 1px solid #e9d5ff; border-radius: 10px; padding: 6px 10px;">
+                            <span style="font-size: 11px; color: #7c3aed; display: flex; align-items: center; gap: 4px; font-weight: 700; text-transform: uppercase;">
                                 ${SVG_ICONS.boxes} Órdenes
                             </span>
-                            <span id="shopify-stat-count" style="font-size: 17px; font-weight: 700; color: #16081e;">${count}</span>
+                            <span id="shopify-stat-count" style="font-size: 17px; font-weight: 700; color: #6b21a8;">${count}</span>
                         </div>
-                        <div style="min-width: 120px;">
-                            <span style="font-size: 11px; color: #70647a; display: flex; align-items: center; gap: 4px; font-weight: 500; text-transform: uppercase;">
+                        <div style="min-width: 140px; background: linear-gradient(135deg, #7c3aed 0%, #6b21a8 100%); border: 1px solid #6d28d9; border-radius: 10px; padding: 6px 10px; box-shadow: 0 2px 8px rgba(147, 51, 234, 0.25);">
+                            <span style="font-size: 11px; color: #ede9fe; display: flex; align-items: center; gap: 4px; font-weight: 700; text-transform: uppercase;">
                                 ${SVG_ICONS.wallet} Total Gastado
                             </span>
-                            <span id="shopify-stat-total" style="font-size: 17px; font-weight: 700; color: #16081e;">${totalSpentFormatted}</span>
+                            <span id="shopify-stat-total" style="font-size: 19px; font-weight: 800; color: #ffffff;">${totalSpentFormatted}</span>
                         </div>
-                        <div style="min-width: 120px;">
-                            <span style="font-size: 11px; color: #70647a; display: flex; align-items: center; gap: 4px; font-weight: 500; text-transform: uppercase;">
+                        <div style="min-width: 120px; background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 10px; padding: 6px 10px;">
+                            <span style="font-size: 11px; color: #555555; display: flex; align-items: center; gap: 4px; font-weight: 700; text-transform: uppercase;">
                                 ${SVG_ICONS.receipt} Sin Descuento
                             </span>
                             <span id="shopify-stat-gross" style="font-size: 17px; font-weight: 700; color: #555555;">${totalGrossFormatted}</span>
                         </div>
-                        <div style="min-width: 120px;">
-                            <span style="font-size: 11px; color: #2e7d32; display: flex; align-items: center; gap: 4px; font-weight: 600; text-transform: uppercase;">
+                        <div style="min-width: 120px; background: #e9f7ef; border: 1px solid #c8ecd8; border-radius: 10px; padding: 6px 10px;">
+                            <span style="font-size: 11px; color: #2e7d32; display: flex; align-items: center; gap: 4px; font-weight: 700; text-transform: uppercase;">
                                 ${SVG_ICONS.piggy} Total Ahorrado
                             </span>
                             <span id="shopify-stat-savings" style="font-size: 17px; font-weight: 700; color: #2e7d32;">${totalSavingsFormatted}</span>
                         </div>
-                        <div style="min-width: 110px;">
-                            <span style="font-size: 11px; color: #70647a; display: flex; align-items: center; gap: 4px; font-weight: 500; text-transform: uppercase;">
+                        <div style="min-width: 110px; background: #eff6ff; border: 1px solid #dbeafe; border-radius: 10px; padding: 6px 10px;">
+                            <span style="font-size: 11px; color: #1d4ed8; display: flex; align-items: center; gap: 4px; font-weight: 700; text-transform: uppercase;">
                                 ${SVG_ICONS.chart} Promedio
                             </span>
-                            <span id="shopify-stat-avg" style="font-size: 17px; font-weight: 700; color: #16081e;">${avgFormatted}</span>
+                            <span id="shopify-stat-avg" style="font-size: 17px; font-weight: 700; color: #1d4ed8;">${avgFormatted}</span>
                         </div>
-                        <div style="min-width: 140px; border-left: 1px dashed #e2d9ec; padding-left: 12px;">
-                            <span style="font-size: 11px; color: #b45309; display: flex; align-items: center; gap: 4px; font-weight: 600; text-transform: uppercase;">
+                        <div style="min-width: 150px; background: #fff8e1; border: 1px solid #fef3c7; border-radius: 10px; padding: 6px 10px;">
+                            <span style="font-size: 11px; color: #b45309; display: flex; align-items: center; gap: 4px; font-weight: 700; text-transform: uppercase;">
                                 ${SVG_ICONS.trophy} Más Comprado
                             </span>
                             <div style="display: flex; align-items: center; gap: 6px; margin-top: 2px;">
                                 ${topProduct?.imageUrl ? `<img src="${topProduct.imageUrl}" style="width: 22px; height: 22px; border-radius: 4px; object-fit: cover;" />` : ''}
                                 <div>
-                                    <span id="shopify-stat-topprod-title" style="font-size: 13px; font-weight: 700; color: #16081e; display: block; line-height: 1.1;" title="${topProduct?.title || ''}">${topProductTitle}</span>
-                                    <span id="shopify-stat-topprod-sub" style="font-size: 10px; color: #70647a; font-weight: 500;">${topProductSub}</span>
+                                    <span id="shopify-stat-topprod-title" style="font-size: 13px; font-weight: 700; color: #b45309; display: block; line-height: 1.1;" title="${topProduct?.title || ''}">${topProductTitle}</span>
+                                    <span id="shopify-stat-topprod-sub" style="font-size: 10px; color: #b45309; opacity: 0.75; font-weight: 500;">${topProductSub}</span>
                                 </div>
                             </div>
                         </div>
                     </div>
                     
-                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; width: 100%;">
                         <span id="shopify-stat-badge" style="font-size: 11px; background: ${badgeColor}; color: #fff; padding: 5px 10px; border-radius: 6px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
                             ${statusText}
                         </span>
@@ -699,7 +747,7 @@
                             </button>
                         ` : ''}
                         ${!statusText.includes('parcial') && !isAutoLoadingAll ? `
-                            <button id="shopify-btn-force-refresh" style="padding: 5px 10px; border-radius: 6px; border: 1px solid ${themeColor}; background: #ffffff; color: #16081e; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                            <button id="shopify-btn-force-refresh" style="padding: 5px 10px; border-radius: 6px; border: 1px solid ${themeColor}; background: ${themeColor}; color: #ffffff; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 5px; box-shadow: 0 2px 6px rgba(147, 51, 234, 0.25); ${isSyncingDetails ? 'animation: shopifyPulse 1.2s ease-in-out infinite;' : ''}">
                                 ${isSyncingDetails ? SVG_ICONS.spin : SVG_ICONS.refresh} ${isSyncingDetails ? 'Sincronizando...' : 'Actualizar'}
                             </button>
                             ${isSyncingDetails ? `
@@ -707,7 +755,7 @@
                                     ${SVG_ICONS.trash} Detener
                                 </button>
                             ` : ''}
-                            <button id="shopify-btn-open-modal" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #9333ea; background: linear-gradient(135deg, #f8f5fb 0%, #ffffff 100%); color: #9333ea; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                            <button id="shopify-btn-open-modal" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #9333ea; background: #ffffff; color: #9333ea; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 5px;">
                                 ${SVG_ICONS.trophy} Ver Reporte Completo
                             </button>
                             <button id="shopify-btn-clear-storage" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #d32f2f; background: #ffffff; color: #d32f2f; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
@@ -977,7 +1025,8 @@
                 const discountAmount = typeof item === 'object' && item !== null ? parseFloat(item.discountAmount || 0) : 0;
                 const date = typeof item === 'object' && item !== null ? item.date : null;
                 const discountCode = typeof item === 'object' && item !== null ? item.discountCode : null;
-                const paymentMethod = typeof item === 'object' && item !== null ? item.paymentMethod : null;
+                const discountType = typeof item === 'object' && item !== null ? (item.discountType || null) : null;
+                const paymentMethod = typeof item === 'object' && item !== null ? (cleanPaymentMethodLabel(item.paymentMethod) || null) : null;
                 const note = typeof item === 'object' && item !== null ? item.note : null;
                 const items = typeof item === 'object' && item !== null ? item.items : null;
                 const gid = typeof item === 'object' && item !== null ? item.gid : null;
@@ -987,10 +1036,11 @@
 
                 if (!isNaN(price)) {
                     if (!cleaned[cleanKey]) {
-                        cleaned[cleanKey] = { price, priceBeforeDiscounts, discountAmount, date, discountCode, paymentMethod, note, items, gid, detailFetched, verifiedNoDiscount, syncAttempts };
+                        cleaned[cleanKey] = { price, priceBeforeDiscounts, discountAmount, date, discountCode, discountType, paymentMethod, note, items, gid, detailFetched, verifiedNoDiscount, syncAttempts };
                     } else {
                         if (!cleaned[cleanKey].date && date) cleaned[cleanKey].date = date;
                         if (!cleaned[cleanKey].discountCode && discountCode) cleaned[cleanKey].discountCode = discountCode;
+                        if (!cleaned[cleanKey].discountType && discountType) cleaned[cleanKey].discountType = discountType;
                         if (!cleaned[cleanKey].priceBeforeDiscounts && priceBeforeDiscounts) cleaned[cleanKey].priceBeforeDiscounts = priceBeforeDiscounts;
                         if (!cleaned[cleanKey].discountAmount && discountAmount) cleaned[cleanKey].discountAmount = discountAmount;
                         if (!cleaned[cleanKey].paymentMethod && paymentMethod) cleaned[cleanKey].paymentMethod = paymentMethod;
@@ -1075,6 +1125,42 @@
         return null;
     }
 
+    function findDeepDiscountType(obj) {
+        if (!obj || typeof obj !== 'object') return null;
+        const typeName = obj.__typename || obj.discountApplicationType || obj.targetType || '';
+        if (typeName) {
+            const t = String(typeName).toLowerCase();
+            if (t.includes('manual')) return 'manual';
+            if (t.includes('automatic')) return 'automatic';
+            if (t.includes('code')) return 'code';
+        }
+        if (obj.discountApplication) {
+            const res = findDeepDiscountType(obj.discountApplication);
+            if (res) return res;
+        }
+        const apps = obj.discountApplications?.nodes || obj.discountApplications || obj.allOrderLevelAppliedDiscounts || obj.discountInformation;
+        if (Array.isArray(apps)) {
+            for (const app of apps) {
+                const res = findDeepDiscountType(app);
+                if (res) return res;
+            }
+        }
+        if (Array.isArray(obj)) {
+            for (const item of obj) {
+                const res = findDeepDiscountType(item);
+                if (res) return res;
+            }
+        } else {
+            for (const k in obj) {
+                if (typeof obj[k] === 'object') {
+                    const res = findDeepDiscountType(obj[k]);
+                    if (res) return res;
+                }
+            }
+        }
+        return null;
+    }
+
     function findDeepDiscountAmount(obj) {
         if (!obj || typeof obj !== 'object') return 0;
         let sum = 0;
@@ -1134,12 +1220,16 @@
                 const cleanVariant = (vTitle && typeof vTitle === 'string' && vTitle.toLowerCase() !== 'default title') ? vTitle.trim() : null;
 
                 if (title && typeof title === 'string') {
+                    const priceNum = !isNaN(parseFloat(price)) ? parseFloat(price) : 0;
+                    const priceBeforeNum = !isNaN(parseFloat(priceBefore)) ? parseFloat(priceBefore) : priceNum;
+                    const itemDiscount = Math.max(0, priceBeforeNum - priceNum);
                     items.push({
                         title: title.trim(),
                         variantTitle: cleanVariant,
                         quantity: !isNaN(quantity) ? quantity : 1,
-                        price: !isNaN(parseFloat(price)) ? parseFloat(price) : 0,
-                        priceBefore: !isNaN(parseFloat(priceBefore)) ? parseFloat(priceBefore) : (!isNaN(parseFloat(price)) ? parseFloat(price) : 0),
+                        price: priceNum,
+                        priceBefore: priceBeforeNum,
+                        discountAmount: itemDiscount,
                         imageUrl: imgUrl,
                         url: prodUrl
                     });
@@ -1189,16 +1279,37 @@
         return lines.join('\n');
     }
 
+    function getOrderUrl(gid) {
+        if (!gid) return null;
+        const numericId = String(gid).replace('gid://shopify/Order/', '').trim();
+        if (!numericId) return null;
+        const basePath = window.location.pathname.split('/account')[0];
+        return `${window.location.origin}${basePath}/account/orders/${numericId}`;
+    }
+
     function getTopProducts(ordersMap) {
         const map = {};
         for (const key in ordersMap) {
             const order = ordersMap[key];
             if (Array.isArray(order.items)) {
+                // Descuento a nivel de TODA la orden: si los ítems no traen descuento individual,
+                // prorratear el descuento de la orden proporcionalmente sobre cada ítem.
+                const orderDiscountTotal = order.discountAmount || 0;
+                const orderItemsArr = order.items;
+                const orderListTotal = orderItemsArr.reduce((s, x) => s + (x.priceBefore || x.price || 0), 0);
+
                 order.items.forEach(it => {
-                    const prodTitle = it.title.trim();
-                    if (!map[prodTitle]) {
-                        map[prodTitle] = {
-                            title: prodTitle,
+                    // Agrupar por ID de producto (handle de la URL) para que el mismo producto
+                    // con distintas variaciones NO se cuente por separado.
+                    const itemTitle = it.title ? String(it.title).trim() : '';
+                    let groupKey = itemTitle;
+                    if (it.url) {
+                        const handleMatch = String(it.url).match(/\/products\/([^/?#]+)/);
+                        if (handleMatch && handleMatch[1]) groupKey = handleMatch[1];
+                    }
+                    if (!map[groupKey]) {
+                        map[groupKey] = {
+                            title: itemTitle,
                             quantity: 0,
                             totalSpent: 0,
                             imageUrl: it.imageUrl,
@@ -1214,17 +1325,32 @@
                     const unitPriceGross = qty > 0 ? (it.priceBefore ? it.priceBefore / qty : unitPrice) : unitPrice;
                     const variantName = it.variantTitle || 'Estándar';
 
-                    map[prodTitle].quantity += qty;
-                    map[prodTitle].totalSpent += it.price;
-                    if (it.imageUrl && !map[prodTitle].imageUrl) {
-                        map[prodTitle].imageUrl = it.imageUrl;
+                    let unitPaid = unitPrice;
+                    let unitList = unitPriceGross;
+                    const hasItemDiscount = it.priceBefore && it.priceBefore > it.price;
+                    if (hasItemDiscount) {
+                        unitPaid = unitPrice;
+                    } else if (orderDiscountTotal > 0 && orderListTotal > 0) {
+                        // Descuento sobre toda la orden: aplicar la parte proporcional a este ítem
+                        const grossItemTotal = it.priceBefore || it.price || 0;
+                        const itemShare = orderDiscountTotal * (grossItemTotal / orderListTotal);
+                        const discountedItemTotal = Math.max(0, grossItemTotal - itemShare);
+                        unitPaid = qty > 0 ? discountedItemTotal / qty : discountedItemTotal;
+                        unitList = qty > 0 ? grossItemTotal / qty : grossItemTotal;
                     }
-                    if (it.url && !map[prodTitle].url) {
-                        map[prodTitle].url = it.url;
+                    const unitDiscount = unitList > unitPaid ? (unitList - unitPaid) : 0;
+
+                    map[groupKey].quantity += qty;
+                    map[groupKey].totalSpent += it.price;
+                    if (it.imageUrl && !map[groupKey].imageUrl) {
+                        map[groupKey].imageUrl = it.imageUrl;
+                    }
+                    if (it.url && !map[groupKey].url) {
+                        map[groupKey].url = it.url;
                     }
 
-                    if (!map[prodTitle].variants[variantName]) {
-                        map[prodTitle].variants[variantName] = {
+                    if (!map[groupKey].variants[variantName]) {
+                        map[groupKey].variants[variantName] = {
                             name: variantName,
                             quantity: 0,
                             totalSpent: 0,
@@ -1232,23 +1358,25 @@
                             ordersCount: 0
                         };
                     }
-                    map[prodTitle].variants[variantName].quantity += qty;
-                    map[prodTitle].variants[variantName].totalSpent += it.price;
-                    map[prodTitle].variants[variantName].ordersCount += 1;
-                    if (unitPrice > 0) {
-                        map[prodTitle].variants[variantName].prices.push(unitPrice);
-                        map[prodTitle].prices.push(unitPrice);
+                    map[groupKey].variants[variantName].quantity += qty;
+                    map[groupKey].variants[variantName].totalSpent += it.price;
+                    map[groupKey].variants[variantName].ordersCount += 1;
+                    if (unitPaid > 0) {
+                        map[groupKey].variants[variantName].prices.push(unitPaid);
+                        map[groupKey].prices.push(unitPaid);
                     }
 
                     if (order.date) {
-                        map[prodTitle].dates.push(order.date);
+                        map[groupKey].dates.push(order.date);
                     }
 
-                    map[prodTitle].history.push({
+                    map[groupKey].history.push({
                         orderName: key,
+                        orderGid: order.gid || null,
                         date: order.date || null,
-                        unitPricePaid: unitPrice,
-                        unitPriceGross: unitPriceGross,
+                        unitPricePaid: unitPaid,
+                        unitPriceGross: unitList,
+                        discountAmount: unitDiscount,
                         discountCode: order.discountCode || null,
                         variantName: variantName
                     });
@@ -1276,6 +1404,35 @@
                 return (da && db) ? da - db : 0;
             });
 
+            // Agrupar histórico por (variante + precio) para NO repetir info:
+            // solo un cambio real de precio o de variante genera una nueva entrada.
+            const groupedHistory = [];
+            const historyGroups = {};
+            p.history.forEach(h => {
+                const paidKey = parseFloat(h.unitPricePaid.toFixed(2));
+                const grossKey = parseFloat(h.unitPriceGross.toFixed(2));
+                const groupKey = `${h.variantName}__${paidKey}__${grossKey}`;
+                if (!historyGroups[groupKey]) {
+                    historyGroups[groupKey] = {
+                        variantName: h.variantName,
+                        unitPricePaid: h.unitPricePaid,
+                        unitPriceGross: h.unitPriceGross,
+                        discountAmount: h.discountAmount,
+                        discountCode: h.discountCode,
+                        orders: [],
+                        dates: []
+                    };
+                    groupedHistory.push(historyGroups[groupKey]);
+                }
+                historyGroups[groupKey].orders.push({ orderName: h.orderName, orderGid: h.orderGid });
+                historyGroups[groupKey].dates.push(h.date);
+            });
+            groupedHistory.sort((a, b) => {
+                const da = parseSpanishDate(a.dates[0]);
+                const db = parseSpanishDate(b.dates[0]);
+                return (da && db) ? da - db : 0;
+            });
+
             const variantList = Object.values(p.variants).map(v => {
                 const uPrices = Array.from(new Set(v.prices.map(px => parseFloat(px.toFixed(2))))).sort((a, b) => a - b);
                 const minVPrice = uPrices.length > 0 ? uPrices[0] : 0;
@@ -1300,11 +1457,22 @@
                 hasPriceVariation,
                 uniquePrices,
                 dateRangeStr,
-                variantList
+                variantList,
+                groupedHistory
             };
         });
 
         return result.sort((a, b) => b.quantity - a.quantity);
+    }
+
+    function cleanPaymentMethodLabel(value) {
+        if (!value) return null;
+        const v = String(value).trim();
+        if (!v) return null;
+        const lower = v.toLowerCase();
+        if (lower === 'card' || lower === 'tarjeta credito/debito' || lower === 'tarjeta crédito/débito' || lower === 'tarjeta') return 'Tarjeta crédito/débito';
+        if (['sale', 'authorization', 'capture', 'void', 'refund', 'pending', 'success', 'error'].includes(lower)) return null;
+        return v;
     }
 
     function extractPaymentMethodFromObj(obj) {
@@ -1330,20 +1498,21 @@
                 }
 
                 if (name) {
-                    const cleanName = name.trim();
-                    return cardInfo ? `${cleanName} (${cardInfo})` : cleanName;
+                    const cleanName = cleanPaymentMethodLabel(name);
+                    if (cleanName) return cardInfo ? `${cleanName} (${cardInfo})` : cleanName;
                 }
                 if (cardInfo) return cardInfo;
-                if (tx.type && tx.type !== 'CARD') return tx.type;
+                const typeLabel = cleanPaymentMethodLabel(tx.type);
+                if (typeLabel) return typeLabel;
             }
         }
 
-        if (obj.paymentMethodName && typeof obj.paymentMethodName === 'string') return obj.paymentMethodName;
+        if (obj.paymentMethodName && typeof obj.paymentMethodName === 'string') return cleanPaymentMethodLabel(obj.paymentMethodName);
         if (obj.paymentMethod) {
-            if (typeof obj.paymentMethod === 'string') return obj.paymentMethod;
-            if (typeof obj.paymentMethod === 'object' && obj.paymentMethod.name) return obj.paymentMethod.name;
+            if (typeof obj.paymentMethod === 'string') return cleanPaymentMethodLabel(obj.paymentMethod);
+            if (typeof obj.paymentMethod === 'object' && obj.paymentMethod.name) return cleanPaymentMethodLabel(obj.paymentMethod.name);
         }
-        if (obj.gateway && typeof obj.gateway === 'string') return obj.gateway;
+        if (obj.gateway && typeof obj.gateway === 'string') return cleanPaymentMethodLabel(obj.gateway);
 
         return null;
     }
@@ -1386,6 +1555,7 @@
             const priceBeforeNum = priceBefore ? parseFloat(priceBefore) : null;
             const discountCode = findDeepDiscountCode(obj);
             const discountAmount = findDeepDiscountAmount(obj);
+            const discountType = findDeepDiscountType(obj) || (existing.discountType || null);
 
             const extractedItems = extractLineItemsFromObj(obj);
             const combinedItems = (extractedItems.length > 0) ? extractedItems : (existing.items || null);
@@ -1406,6 +1576,7 @@
                 discountAmount: discountAmount > 0 ? discountAmount : (existing.discountAmount || 0),
                 date: date || existing.date || null,
                 discountCode: discountCode || existing.discountCode || null,
+                discountType: discountType || existing.discountType || null,
                 gid: gid || existing.gid || null,
                 detailFetched: hasDetailInfo ? true : (existing.detailFetched || false),
                 verifiedNoDiscount: isDetailResponse ? true : (existing.verifiedNoDiscount || false),
@@ -1593,35 +1764,8 @@
 
                 let fetchedSuccess = false;
 
-                // Estrategia 1 (PRIMARIA - NATIVA IDENTICA AL CLIC MANUAL): Remix Data Loader GET Route
-                try {
-                    const resp = await targetWindow.fetch(remixUrl, {
-                        method: 'GET',
-                        credentials: 'include',
-                        headers: { 'Accept': 'application/json, text/plain, */*' }
-                    });
-
-                    if (resp.status === 429) {
-                        await new Promise(r => setTimeout(r, 1500));
-                    } else if (resp.ok) {
-                        const resJson = await parseResponseSafely(resp);
-                        if (resJson) {
-                            if (resJson?.order && !resJson.order.name) {
-                                resJson.order.name = item.name;
-                            }
-                            let currentOrders = getStoredOrders();
-                            if (extractOrdersFromObj(resJson, currentOrders, true)) {
-                                if (currentOrders[item.name]) currentOrders[item.name].detailFetched = true;
-                                saveStoredOrders(currentOrders);
-                                fetchedSuccess = true;
-                                logAnalytics('✅ [Remix Loader] Sincronización nativa exitosa para:', item.name);
-                            }
-                        }
-                    }
-                } catch (e1) { }
-
-                // Estrategia 2 (SECUNDARIA): GraphQL OrderDetails POST con token Authorization
-                if (!fetchedSuccess && authHeader) {
+                // Estrategia 1 (PRIMARIA): GraphQL OrderDetails POST — query completa (nota, transacciones, descuentos, ítems, variantes)
+                if (authHeader) {
                     try {
                         const resp = await targetWindow.fetch(graphqlUrl + '?operation=OrderDetails', {
                             method: 'POST',
@@ -1650,6 +1794,35 @@
                                     saveStoredOrders(currentOrders);
                                     fetchedSuccess = true;
                                     logAnalytics('✅ [GraphQL OrderDetails] Sincronización exitosa para:', item.name);
+                                }
+                            }
+                        }
+                    } catch (e1) { }
+                }
+
+                // Estrategia 2 (SECUNDARIA): Remix Data Loader GET Route
+                if (!fetchedSuccess) {
+                    try {
+                        const resp = await targetWindow.fetch(remixUrl, {
+                            method: 'GET',
+                            credentials: 'include',
+                            headers: { 'Accept': 'application/json, text/plain, */*' }
+                        });
+
+                        if (resp.status === 429) {
+                            await new Promise(r => setTimeout(r, 1500));
+                        } else if (resp.ok) {
+                            const resJson = await parseResponseSafely(resp);
+                            if (resJson) {
+                                if (resJson?.order && !resJson.order.name) {
+                                    resJson.order.name = item.name;
+                                }
+                                let currentOrders = getStoredOrders();
+                                if (extractOrdersFromObj(resJson, currentOrders, true)) {
+                                    if (currentOrders[item.name]) currentOrders[item.name].detailFetched = true;
+                                    saveStoredOrders(currentOrders);
+                                    fetchedSuccess = true;
+                                    logAnalytics('✅ [Remix Loader] Sincronización nativa exitosa para:', item.name);
                                 }
                             }
                         }
