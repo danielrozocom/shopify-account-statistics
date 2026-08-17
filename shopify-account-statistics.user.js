@@ -248,6 +248,11 @@
                                 🔄 Cargar todos
                             </button>
                         ` : ''}
+                        ${!statusText.includes('parcial') && !isAutoLoadingAll && !isSyncingDetails ? `
+                            <button id="shopify-btn-force-refresh" style="padding: 5px 10px; border-radius: 6px; border: 1px solid ${themeColor}; background: #ffffff; color: #16081e; font-size: 11px; font-weight: 600; cursor: pointer;">
+                                🔄 Actualizar
+                            </button>
+                        ` : ''}
                     </div>
                 </div>
 
@@ -333,6 +338,19 @@
 
             const btnLoadAll = document.getElementById('shopify-btn-load-all');
             if (btnLoadAll) btnLoadAll.onclick = () => loadAllOrders();
+
+            const btnForceRefresh = document.getElementById('shopify-btn-force-refresh');
+            if (btnForceRefresh) {
+                btnForceRefresh.onclick = async () => {
+                    let currentOrders = getStoredOrders();
+                    for (const k in currentOrders) {
+                        if (currentOrders[k]) currentOrders[k].detailFetched = false;
+                    }
+                    saveStoredOrders(currentOrders);
+                    updateDashboard();
+                    await syncMissingOrderDetails();
+                };
+            }
         } else {
             const countEl = panel.querySelector('#shopify-stat-count');
             if (countEl) countEl.textContent = count;
