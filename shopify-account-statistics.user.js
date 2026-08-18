@@ -23,6 +23,12 @@
     let isSyncCancelled = false;
     let userStoppedSync = false;
 
+    // Detección robusta de página de detalle individual (ignora ?region_country=CO u otros query params)
+    var currentRoutePath = window.location.pathname;
+    var detailPageMatch = currentRoutePath.match(/\/orders\/(\d+)/i);
+    var isOrderDetailPage = !!detailPageMatch;
+    var detailOrderId = detailPageMatch ? detailPageMatch[1] : null;
+
     function logAnalytics(msg, ...args) {
         console.log(`%c[Shopify Analytics] ${msg}`, 'color: #9333ea; font-weight: bold;', ...args);
     }
@@ -301,11 +307,12 @@
         return filteredMap;
     }
 
-    function openAnalyticsModal(ordersMap) {
+    function openAnalyticsModal(ordersMap, activeSortMode = 'quantity') {
         let modal = document.getElementById('shopify-analytics-modal');
         if (modal) modal.remove();
 
-        const topProductsList = getTopProducts(ordersMap);
+        let currentSortMode = activeSortMode || 'quantity';
+        const topProductsList = getTopProducts(ordersMap, currentSortMode);
         const discountBreakdown = getDiscountBreakdown(ordersMap);
         const paymentBreakdown = getPaymentBreakdown(ordersMap);
 
@@ -342,8 +349,10 @@
 
                 let priceHistoryHtml = '';
                 if (p.hasPriceVariation) {
-                    const pct = p.minPrice > 0 ? (((p.maxPrice - p.minPrice) / p.minPrice) * 100).toFixed(1) : null;
-                    priceHistoryHtml = `<span style="font-size: 11px; font-weight: 700; color: #b45309; white-space: nowrap;">📈 ${formatCurrency(p.minPrice)} – ${formatCurrency(p.maxPrice)} ${pct ? `(+${pct}%)` : ''} <span style="color: #70647a; font-weight: 500;">/ und.</span></span>`;
+                    const diff = p.maxPrice - p.minPrice;
+                    const diffStr = formatCurrency(diff);
+                    const pct = p.minPrice > 0 ? ((diff / p.minPrice) * 100).toFixed(1) : null;
+                    priceHistoryHtml = `<span style="font-size: 11px; font-weight: 700; color: #b45309; white-space: nowrap;">📈 ${formatCurrency(p.minPrice)} – ${formatCurrency(p.maxPrice)} ${pct ? `(+${diffStr} / +${pct}%)` : ''} <span style="color: #70647a; font-weight: 500;">/ und.</span></span>`;
                 } else if (p.minPrice > 0) {
                     priceHistoryHtml = `<span style="font-size: 11px; font-weight: 700; color: #16081e; white-space: nowrap;">${formatCurrency(p.minPrice)} <span style="color: #70647a; font-weight: 500;">/ und.</span></span>`;
                 } else {
@@ -387,6 +396,85 @@
                 const grouped = (Array.isArray(p.groupedHistory) && p.groupedHistory.length > 0) ? p.groupedHistory : null;
                 let historySubRowHtml = '';
                 if (grouped) {
+                    // Generar resumen exclusivo de Cambios de Precio BASE (unitPriceGross: precio de catálogo del producto sin cupones)
+                    const priceChanges = [];
+                    for (let gIdx = 0; gIdx < grouped.length - 1; gIdx++) {
+                        const cur = grouped[gIdx];
+                        const next = grouped[gIdx + 1];
+                        const curBasePrice = cur.unitPriceGross || cur.unitPricePaid;
+                        const nextBasePrice = next.unitPriceGross || next.unitPricePaid;
+                        const eps = 0.005;
+                        if (Math.abs(nextBasePrice - curBasePrice) > eps) {
+                            const diff = Math.abs(nextBasePrice - curBasePrice);
+                            const isUp = nextBasePrice > curBasePrice;
+                            const pct = curBasePrice > 0 ? ((diff / curBasePrice) * 100).toFixed(1) : '0';
+                            const dateFrom = cur.dates.map(d => formatDateShort(d)).filter(Boolean)[0] || 'Periodo anterior';
+                            const dateTo = next.dates.map(d => formatDateShort(d)).filter(Boolean)[0] || 'Periodo posterior';
+                            const curVariants = Array.isArray(cur.variantNames) && cur.variantNames.length > 0 ? cur.variantNames.join(', ') : 'Estándar';
+                            const nextVariants = Array.isArray(next.variantNames) && next.variantNames.length > 0 ? next.variantNames.join(', ') : 'Estándar';
+
+                            priceChanges.push({
+                                isUp,
+                                curPrice: curBasePrice,
+                                nextPrice: nextBasePrice,
+                                curPaid: cur.unitPricePaid,
+                                nextPaid: next.unitPricePaid,
+                                curDiscount: cur.discountAmount > 0,
+                                nextDiscount: next.discountAmount > 0,
+                                curVariants,
+                                nextVariants,
+                                diff,
+                                pct,
+                                dateFrom,
+                                dateTo
+                            });
+                        }
+                    }
+
+                    let priceChangesSummaryHtml = '';
+                    if (priceChanges.length === 0) {
+                        priceChangesSummaryHtml = `
+                            <div style="padding: 10px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 11px; color: #64748b; margin-bottom: 14px; text-align: center;">
+                                🔒 El precio de este producto se ha mantenido constante (${formatCurrency(grouped[0].unitPricePaid)} / und.) a lo largo de todas tus compras.
+                            </div>
+                        `;
+                    } else {
+                        const changeRowsHtml = priceChanges.map(ch => {
+                            const color = ch.isUp ? '#c2410c' : '#15803d';
+                            const bg = ch.isUp ? '#fff7ed' : '#f0fdf4';
+                            const border = ch.isUp ? '#ffedd5' : '#dcfce7';
+                            const icon = ch.isUp ? '📈' : '📉';
+                            const label = ch.isUp ? 'Precio de catálogo subió' : 'Precio de catálogo bajó';
+                            const sign = ch.isUp ? '+' : '-';
+                            const variantTag = (ch.curVariants !== 'Estándar' || ch.nextVariants !== 'Estándar')
+                                ? `<span style="font-size: 10px; color: #6b21a8; background: #faf5ff; border: 1px solid #f3e8ff; padding: 1px 6px; border-radius: 4px; font-weight: 600;">🎨 ${ch.curVariants === ch.nextVariants ? ch.curVariants : `${ch.curVariants} ➔ ${ch.nextVariants}`}</span>`
+                                : '';
+
+                            return `
+                                <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: ${bg}; border: 1px solid ${border}; border-radius: 8px; font-size: 11px; margin-bottom: 4px; gap: 8px; flex-wrap: wrap;">
+                                    <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                                        <span>${icon}</span>
+                                        ${variantTag}
+                                        <span style="font-weight: 700; color: ${color};">${label}: ${formatCurrency(ch.curPrice)} ➔ ${formatCurrency(ch.nextPrice)} / und.</span>
+                                        <span style="color: #64748b; font-weight: 500;">(alrededor de ${ch.dateTo})</span>
+                                    </div>
+                                    <span style="font-weight: 800; color: ${color}; background: #ffffff; padding: 2px 8px; border-radius: 6px; border: 1px solid ${border}; white-space: nowrap;">
+                                        ${sign}${formatCurrency(ch.diff)} (${sign}${ch.pct}%)
+                                    </span>
+                                </div>
+                            `;
+                        }).join('');
+
+                        priceChangesSummaryHtml = `
+                            <div style="margin-bottom: 14px; padding: 12px; background: #faf5ff; border: 1px solid #f3e8ff; border-radius: 12px;">
+                                <div style="font-weight: 700; color: #7e22ce; font-size: 12px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                                    📊 Registro Exclusivo de Cambios de Precio de Catálogo (${priceChanges.length}):
+                                </div>
+                                ${changeRowsHtml}
+                            </div>
+                        `;
+                    }
+
                     const timelineCardsHtml = grouped.map((g, gIdx) => {
                         const paidStr = formatCurrency(g.unitPricePaid);
                         const hasDiscount = g.discountAmount > 0;
@@ -395,15 +483,14 @@
                         const count = g.orders.length;
                         const countLabel = count === 1 ? '1 compra' : `${count} compras`;
 
-                        const variantChip = g.variantName
-                            ? `<span style="color:${g.variantName === 'Estándar' ? '#70647a' : '#6b21a8'}; font-weight:600; background:${g.variantName === 'Estándar' ? '#f8f5fb' : '#faf5ff'}; border:1px solid ${g.variantName === 'Estándar' ? '#eee5f7' : '#f3e8ff'}; padding:1px 6px; border-radius:4px; white-space:nowrap;">🎨 ${g.variantName}</span>`
-                            : '';
+                        const vNamesStr = Array.isArray(g.variantNames) && g.variantNames.length > 0 ? g.variantNames.join(', ') : (g.variantName || 'Estándar');
+                        const variantChip = `<span style="color: ${vNamesStr === 'Estándar' ? '#64748b' : '#6b21a8'}; font-weight: 600; background: ${vNamesStr === 'Estándar' ? '#f1f5f9' : '#faf5ff'}; border: 1px solid ${vNamesStr === 'Estándar' ? '#e2e8f0' : '#f3e8ff'}; padding: 2px 8px; border-radius: 6px; white-space: nowrap;">🎨 ${vNamesStr}</span>`;
 
                         const orderLinks = g.orders.map(o => {
                             const url = getOrderUrl(o.orderGid);
                             return url
-                                ? `<a href="${url}" target="_blank" rel="noopener noreferrer" style="font-weight:700; color:#9333ea; background:#f3e8ff; padding:1px 6px; border-radius:6px; font-size:11px; text-decoration:none; white-space:nowrap;" onmouseover="this.style.textDecoration='underline';" onmouseout="this.style.textDecoration='none';">${o.orderName} ↗</a>`
-                                : `<span style="font-weight:700; color:#9333ea; background:#f3e8ff; padding:1px 6px; border-radius:6px; font-size:11px; white-space:nowrap;">${o.orderName}</span>`;
+                                ? `<a href="${url}" target="_blank" rel="noopener noreferrer" style="font-weight: 700; color: #9333ea; background: #f3e8ff; border: 1px solid #e9d5ff; padding: 2px 8px; border-radius: 6px; font-size: 11px; text-decoration: none; white-space: nowrap; transition: all 0.2s ease;" onmouseover="this.style.background='#9333ea'; this.style.color='#ffffff';" onmouseout="this.style.background='#f3e8ff'; this.style.color='#9333ea';">${o.orderName} ↗</a>`
+                                : `<span style="font-weight: 700; color: #9333ea; background: #f3e8ff; border: 1px solid #e9d5ff; padding: 2px 8px; border-radius: 6px; font-size: 11px; white-space: nowrap;">${o.orderName}</span>`;
                         }).join(' ');
 
                         const dateStrs = g.dates.map(d => formatDateShort(d)).filter(Boolean);
@@ -411,62 +498,47 @@
                             ? (dateStrs.length === 1 ? dateStrs[0] : `${dateStrs[0]} ➔ ${dateStrs[dateStrs.length - 1]}`)
                             : 'Sin fecha';
 
-                        let changeConnectorHtml = '';
-                        if (gIdx < grouped.length - 1) {
-                            const next = grouped[gIdx + 1];
-                            const curPrice = g.unitPricePaid;
-                            const nextPrice = next.unitPricePaid;
-                            const curTag = g.discountAmount > 0 ? ' (con desc.)' : ' (sin desc.)';
-                            const nextTag = next.discountAmount > 0 ? ' (con desc.)' : ' (sin desc.)';
-                            const eps = 0.005;
-                            if (nextPrice > curPrice + eps) {
-                                const diff = nextPrice - curPrice;
-                                const pct = curPrice > 0 ? ((diff / curPrice) * 100).toFixed(1) : '0';
-                                changeConnectorHtml = `
-                                    <div style="display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0 0 2px 0; padding: 3px 8px; font-size: 11px; font-weight: 700; color: #c2410c; background: #fff7ed; border: 1px solid #ffedd5; border-radius: 8px; text-align: center;">
-                                        📈 El precio subió: ${formatCurrency(curPrice)}${curTag} → ${formatCurrency(nextPrice)}${nextTag} / und. (+${pct}%)
-                                    </div>`;
-                            } else if (nextPrice < curPrice - eps) {
-                                const diff = curPrice - nextPrice;
-                                const pct = curPrice > 0 ? ((diff / curPrice) * 100).toFixed(1) : '0';
-                                changeConnectorHtml = `
-                                    <div style="display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0 0 2px 0; padding: 3px 8px; font-size: 11px; font-weight: 700; color: #2e7d32; background: #e9f7ef; border: 1px solid #c8ecd8; border-radius: 8px; text-align: center;">
-                                        📉 El precio bajó: ${formatCurrency(curPrice)}${curTag} → ${formatCurrency(nextPrice)}${nextTag} / und. (-${pct}%)
-                                    </div>`;
-                            }
-                        }
-
                         return `
-                            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; background: #ffffff; border: 1px solid #e9d5ff; border-radius: 8px; font-size: 11px; margin-bottom: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.03); gap: 10px; flex-wrap: wrap;">
-                                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                                    ${variantChip}
-                                    <span style="font-weight: 700; color: #2e7d32; background: #e9f7ef; border: 1px solid #c8ecd8; padding: 1px 6px; border-radius: 4px; white-space:nowrap;">× ${countLabel}</span>
-                                    <span style="color: #70647a; font-weight: 500; white-space:nowrap;">📅 ${dateLabel}</span>
-                                </div>
-                                <div style="text-align: right; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                                    <div>
-                                        <span style="font-weight: 700; color: #2e7d32; font-size: 12px; white-space:nowrap;">Con desc.: ${paidStr}/und.</span>
-                                        ${hasDiscount ? `<span style="color: #70647a; font-size: 10px; text-decoration: line-through; margin-left: 6px; white-space:nowrap;">Sin desc.: ${grossStr}</span>` : ''}
+                            <div style="position: relative; padding-left: 24px; margin-bottom: 8px;">
+                                <div style="position: absolute; left: 4px; top: 14px; width: 10px; height: 10px; border-radius: 50%; background: #9333ea; border: 2px solid #ffffff; box-shadow: 0 0 0 2px #e9d5ff; z-index: 2;"></div>
+                                ${gIdx < grouped.length - 1 ? `<div style="position: absolute; left: 8px; top: 24px; bottom: -12px; width: 2px; background: #e9d5ff; z-index: 1;"></div>` : ''}
+
+                                <div style="background: #ffffff; border: 1px solid #e9d5ff; border-radius: 12px; padding: 12px 16px; font-size: 11px; box-shadow: 0 2px 6px rgba(147, 51, 234, 0.04);">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                            ${variantChip}
+                                            <span style="font-weight: 700; color: #15803d; background: #f0fdf4; border: 1px solid #dcfce7; padding: 2px 8px; border-radius: 6px; white-space: nowrap;">× ${countLabel}</span>
+                                            <span style="color: #64748b; font-weight: 600; background: #f8fafc; border: 1px solid #e2e8f0; padding: 2px 8px; border-radius: 6px; white-space: nowrap;">📅 ${dateLabel}</span>
+                                        </div>
+                                        <div style="text-align: right; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                            <div style="display: flex; flex-direction: column; align-items: flex-end;">
+                                                <span style="font-weight: 800; color: #1e293b; font-size: 13px; white-space: nowrap;">${paidStr} <span style="font-size: 10px; font-weight: 500; color: #64748b;">/ und.</span></span>
+                                                ${hasDiscount ? `<span style="color: #94a3b8; font-size: 10px; text-decoration: line-through; white-space: nowrap;">Precio lista: ${grossStr}</span>` : ''}
+                                            </div>
+                                            ${savedStr ? `<span style="background: #fef3c7; color: #b45309; border: 1px solid #fde68a; padding: 3px 8px; border-radius: 6px; font-weight: 700; font-size: 10px; white-space: nowrap;">🎁 Ahorro ${savedStr}/und. ${g.discountCode ? `(${g.discountCode})` : ''}</span>` : `<span style="background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; padding: 3px 8px; border-radius: 6px; font-weight: 600; font-size: 10px; white-space: nowrap;">Sin descuento</span>`}
+                                        </div>
                                     </div>
-                                    ${savedStr ? `<span style="background: #fef3c7; color: #b45309; border: 1px solid #fde68a; padding: 2px 8px; border-radius: 6px; font-weight: 600; font-size: 10px; white-space:nowrap;">🎁 Ahorro ${savedStr}/und. ${g.discountCode ? `(${g.discountCode})` : ''}</span>` : `<span style="color: #94a3b8; font-size: 10px;">Sin descuento</span>`}
+                                    <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; pt-2; border-top: 1px dashed #f1f5f9; padding-top: 8px; font-size: 11px; color: #475569;">
+                                        <span style="font-weight: 700; color: #9333ea;">🛍️ Pedidos (${g.orders.length}):</span> ${orderLinks}
+                                    </div>
                                 </div>
                             </div>
-                            <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 4px 14px 10px 14px; font-size: 11px; color: #4a3e56;">
-                                <span style="font-weight: 600;">Pedidos:</span> ${orderLinks}
-                            </div>
-                            ${changeConnectorHtml}
                         `;
                     }).join('');
 
                     historySubRowHtml = `
-                        <tr id="${historyRowId}" style="display: none; background: #fdfbfe; border-bottom: 2px solid #e9d5ff;">
-                            <td colspan="5" style="padding: 12px 16px;">
-                                <div style="background: #ffffff; border: 1px solid #e2d8ee; border-radius: 12px; padding: 12px; box-shadow: 0 4px 12px rgba(147, 51, 234, 0.08);">
-                                    <div style="font-weight: 700; color: #7e22ce; font-size: 13px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f3e8ff; padding-bottom: 6px;">
-                                        <span>📜 Cronograma de Compras & Histórico de Precios — <strong style="color: #16081e;">${p.title}</strong></span>
-                                        <span style="font-size: 11px; color: #70647a; background: #f3e8ff; padding: 2px 8px; border-radius: 10px; font-weight: 600;">📅 Periodo Activo: ${p.dateRangeStr || 'Sin fecha'}</span>
+                        <tr id="${historyRowId}" style="display: none; background: #faf5ff; border-bottom: 2px solid #e9d5ff;">
+                            <td colspan="5" style="padding: 14px 18px;">
+                                <div style="background: #ffffff; border: 1px solid #e2d8ee; border-radius: 14px; padding: 16px; box-shadow: 0 6px 16px rgba(147, 51, 234, 0.08);">
+                                    <div style="font-weight: 700; color: #7e22ce; font-size: 13px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f3e8ff; padding-bottom: 8px;">
+                                        <span style="display: flex; align-items: center; gap: 6px;">📜 Histórico de Pedidos & Precios — <strong style="color: #16081e;">${p.title}</strong></span>
+                                        <span style="font-size: 11px; color: #6b21a8; background: #f3e8ff; border: 1px solid #e9d5ff; padding: 3px 10px; border-radius: 12px; font-weight: 700;">📅 Periodo Activo: ${p.dateRangeStr || 'Sin fecha'}</span>
                                     </div>
-                                    <div style="display: flex; flex-direction: column; gap: 4px;">
+
+                                    ${priceChangesSummaryHtml}
+
+                                    <div style="font-weight: 700; color: #475569; font-size: 11px; margin: 10px 0 8px 0;">📜 Cronograma Completo de Compras:</div>
+                                    <div style="display: flex; flex-direction: column; gap: 2px;">
                                         ${timelineCardsHtml}
                                     </div>
                                 </div>
@@ -569,8 +641,8 @@
         }
 
         modal.innerHTML = `
-            <div style="background: #ffffff; border-radius: 16px; width: max-content; max-width: 960px; max-height: 85vh; overflow: auto; box-shadow: 0 20px 50px rgba(0,0,0,0.3); border: 2px solid #9333ea; font-family: 'Poppins', sans-serif;">
-                <div style="padding: 24px 28px; border-bottom: 1px solid #f0ecf4; display: flex; align-items: center; justify-content: space-between; background: linear-gradient(135deg, #f8f5fb 0%, #ffffff 100%); border-top-left-radius: 14px; border-top-right-radius: 14px; sticky: top;">
+            <div style="background: #ffffff; border-radius: 16px; width: 95vw; max-width: 1200px; max-height: 90vh; overflow: auto; box-shadow: 0 20px 50px rgba(0,0,0,0.3); border: 2px solid #9333ea; font-family: 'Poppins', sans-serif;">
+                <div style="padding: 20px 24px; border-bottom: 1px solid #f0ecf4; display: flex; align-items: center; justify-content: space-between; background: linear-gradient(135deg, #f8f5fb 0%, #ffffff 100%); border-top-left-radius: 14px; border-top-right-radius: 14px; position: sticky; top: 0; z-index: 10;">
                     <div style="display: flex; align-items: center; gap: 10px;">
                         <span style="font-size: 22px;">🏆</span>
                         <div>
@@ -583,21 +655,31 @@
                     </button>
                 </div>
 
-                <div style="padding: 28px 32px;">
+                <div style="padding: 20px 24px;">
                     <!-- Seccion Productos Mas Comprados -->
                     <div style="margin-bottom: 28px;">
-                        <h3 style="margin: 0 0 14px 0; font-size: 15px; font-weight: 700; color: #9333ea; display: flex; align-items: center; gap: 6px;">
-                            ${SVG_ICONS.trophy} Productos Más Comprados
-                        </h3>
-                        <div style="border: 1px solid #e2d8ee; border-radius: 10px; overflow-x: auto;">
-                            <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+                            <h3 style="margin: 0; font-size: 15px; font-weight: 700; color: #9333ea; display: flex; align-items: center; gap: 6px;">
+                                ${SVG_ICONS.trophy} Productos Más Comprados
+                            </h3>
+                            <div style="display: flex; align-items: center; gap: 6px; background: #f8f5fb; padding: 3px; border-radius: 8px; border: 1px solid #e2d8ee;">
+                                <button id="shopify-sort-qty-btn" style="padding: 4px 10px; border-radius: 6px; border: none; background: ${currentSortMode === 'quantity' ? '#9333ea' : 'transparent'}; color: ${currentSortMode === 'quantity' ? '#ffffff' : '#70647a'}; font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.2s ease;">
+                                    📦 Por Unidades
+                                </button>
+                                <button id="shopify-sort-spent-btn" style="padding: 4px 10px; border-radius: 6px; border: none; background: ${currentSortMode === 'spent' ? '#9333ea' : 'transparent'}; color: ${currentSortMode === 'spent' ? '#ffffff' : '#70647a'}; font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.2s ease;">
+                                    💰 Por Valor Invertido
+                                </button>
+                            </div>
+                        </div>
+                        <div style="border: 1px solid #e2d8ee; border-radius: 10px; overflow-x: auto; width: 100%;">
+                            <table style="width: 100%; border-collapse: collapse; text-align: left; table-layout: auto;">
                                 <thead>
                                     <tr style="background: #f8f5fb; border-bottom: 1px solid #e2d8ee; font-size: 11px; color: #70647a; text-transform: uppercase;">
-                                        <th style="padding: 10px 14px; width: 40px;">Pos</th>
-                                        <th style="padding: 10px 14px;">Producto</th>
-                                        <th style="padding: 10px 14px; text-align: center;">Unidades</th>
-                                        <th style="padding: 10px 14px; text-align: center;">Precio Unitario / Histórico</th>
-                                        <th style="padding: 10px 14px; text-align: right;">Total Invertido</th>
+                                        <th style="padding: 10px 12px; width: 36px;">Pos</th>
+                                        <th style="padding: 10px 12px; min-width: 220px;">Producto</th>
+                                        <th style="padding: 10px 12px; text-align: center; width: 90px;">Unidades</th>
+                                        <th style="padding: 10px 12px; text-align: center;">Precio Unitario / Histórico</th>
+                                        <th style="padding: 10px 12px; text-align: right; width: 140px;">Total Invertido</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -668,21 +750,34 @@
             });
         });
 
+        const sortQtyBtn = modal.querySelector('#shopify-sort-qty-btn');
+        if (sortQtyBtn) {
+            sortQtyBtn.onclick = () => {
+                if (currentSortMode !== 'quantity') {
+                    openAnalyticsModal(ordersMap, 'quantity');
+                }
+            };
+        }
+
+        const sortSpentBtn = modal.querySelector('#shopify-sort-spent-btn');
+        if (sortSpentBtn) {
+            sortSpentBtn.onclick = () => {
+                if (currentSortMode !== 'spent') {
+                    openAnalyticsModal(ordersMap, 'spent');
+                }
+            };
+        }
+
         const closeBtn = document.getElementById('shopify-modal-close');
         if (closeBtn) closeBtn.onclick = () => modal.remove();
         modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
     }
 
-    let currentRoutePath = window.location.pathname;
-    let detailPageMatch = currentRoutePath.match(/account\/orders\/([0-9]+)$/);
-    let isOrderDetailPage = !!detailPageMatch;
-    let detailOrderId = detailPageMatch ? detailPageMatch[1] : null;
-
     function handleRouteChange() {
         const newPath = window.location.pathname;
         if (newPath === currentRoutePath) return;
         currentRoutePath = newPath;
-        detailPageMatch = newPath.match(/account\/orders\/([0-9]+)$/);
+        detailPageMatch = newPath.match(/\/orders\/(\d+)/i);
         isOrderDetailPage = !!detailPageMatch;
         detailOrderId = detailPageMatch ? detailPageMatch[1] : null;
         detailPageForcedRefresh = false;
@@ -1142,23 +1237,12 @@
         if (!app || typeof app !== 'object') return null;
         const code = app.code;
         const title = app.title || app.description || app.name;
-        const typeName = app.__typename || app.discountApplicationType || app.targetType || '';
 
         if (code && typeof code === 'string') {
-            const cleanCode = code.trim();
-            if (!cleanCode.includes('(')) return `${cleanCode} (Código de cupón)`;
-            return cleanCode;
+            return code.trim();
         }
         if (title && typeof title === 'string') {
-            const cleanTitle = title.trim();
-            if (cleanTitle.includes('(')) return cleanTitle;
-            if (typeName.includes('Automatic') || cleanTitle.toLowerCase().includes('auto')) {
-                return `${cleanTitle} (Automático)`;
-            }
-            if (typeName.includes('Manual') || cleanTitle.toLowerCase().includes('manual')) {
-                return `${cleanTitle} (Manual)`;
-            }
-            return `${cleanTitle} (Descuento)`;
+            return title.trim();
         }
         return null;
     }
@@ -1180,7 +1264,7 @@
         }
 
         if (obj.discountCode) {
-            return typeof obj.discountCode === 'string' ? (obj.discountCode.includes('(') ? obj.discountCode : `${obj.discountCode} (Código de cupón)`) : formatDiscountApp(obj.discountCode);
+            return typeof obj.discountCode === 'string' ? obj.discountCode.trim() : formatDiscountApp(obj.discountCode);
         }
 
         if (Array.isArray(obj)) {
@@ -1352,7 +1436,6 @@
 
         return lines.join('\n');
     }
-
     function getOrderUrl(gid) {
         if (!gid) return null;
         const numericId = String(gid).replace('gid://shopify/Order/', '').trim();
@@ -1361,7 +1444,7 @@
         return `${window.location.origin}${basePath}/account/orders/${numericId}`;
     }
 
-    function getTopProducts(ordersMap) {
+    function getTopProducts(ordersMap, sortBy = 'quantity') {
         const map = {};
         for (const key in ordersMap) {
             const order = ordersMap[key];
@@ -1373,8 +1456,6 @@
                 const orderListTotal = orderItemsArr.reduce((s, x) => s + (x.priceBefore || x.price || 0), 0);
 
                 order.items.forEach(it => {
-                    // Agrupar por ID de producto (handle de la URL) para que el mismo producto
-                    // con distintas variaciones NO se cuente por separado.
                     const itemTitle = it.title ? String(it.title).trim() : '';
                     let groupKey = slugifyTitle(itemTitle) || itemTitle.toLowerCase();
                     if (it.url) {
@@ -1405,7 +1486,6 @@
                     if (hasItemDiscount) {
                         unitPaid = unitPrice;
                     } else if (orderDiscountTotal > 0 && orderListTotal > 0) {
-                        // Descuento sobre toda la orden: aplicar la parte proporcional a este ítem
                         const grossItemTotal = it.priceBefore || it.price || 0;
                         const itemShare = orderDiscountTotal * (grossItemTotal / orderListTotal);
                         const discountedItemTotal = Math.max(0, grossItemTotal - itemShare);
@@ -1422,6 +1502,7 @@
                     if (it.url && !map[groupKey].url) {
                         map[groupKey].url = it.url;
                     }
+                    map[groupKey].prices.push(unitPaid);
 
                     if (!map[groupKey].variants[variantName]) {
                         map[groupKey].variants[variantName] = {
@@ -1478,33 +1559,37 @@
                 return (da && db) ? da - db : 0;
             });
 
-            // Agrupar histórico por (variante + precio) para NO repetir info:
-            // solo un cambio real de precio o de variante genera una nueva entrada.
+            // Agrupar histórico secuencialmente por fecha cronológica (del más antiguo al más reciente).
+            // Solo agrupar si son compras CONSECUTIVAS al mismo precio y descuento para no mezclar periodos temporales distintos.
             const groupedHistory = [];
-            const historyGroups = {};
             p.history.forEach(h => {
                 const paidKey = parseFloat(h.unitPricePaid.toFixed(2));
                 const grossKey = parseFloat(h.unitPriceGross.toFixed(2));
-                const groupKey = `${h.variantName}__${paidKey}__${grossKey}`;
-                if (!historyGroups[groupKey]) {
-                    historyGroups[groupKey] = {
-                        variantName: h.variantName,
+                const discountKey = h.discountCode || '';
+
+                const lastGroup = groupedHistory[groupedHistory.length - 1];
+                const isSameAsLast = lastGroup &&
+                    Math.abs(lastGroup.unitPricePaid - h.unitPricePaid) < 0.01 &&
+                    Math.abs(lastGroup.unitPriceGross - h.unitPriceGross) < 0.01 &&
+                    (lastGroup.discountCode || '') === discountKey;
+
+                if (isSameAsLast) {
+                    if (h.variantName && !lastGroup.variantNames.includes(h.variantName)) {
+                        lastGroup.variantNames.push(h.variantName);
+                    }
+                    lastGroup.orders.push({ orderName: h.orderName, orderGid: h.orderGid });
+                    lastGroup.dates.push(h.date);
+                } else {
+                    groupedHistory.push({
+                        variantNames: [h.variantName],
                         unitPricePaid: h.unitPricePaid,
                         unitPriceGross: h.unitPriceGross,
                         discountAmount: h.discountAmount,
                         discountCode: h.discountCode,
-                        orders: [],
-                        dates: []
-                    };
-                    groupedHistory.push(historyGroups[groupKey]);
+                        orders: [{ orderName: h.orderName, orderGid: h.orderGid }],
+                        dates: [h.date]
+                    });
                 }
-                historyGroups[groupKey].orders.push({ orderName: h.orderName, orderGid: h.orderGid });
-                historyGroups[groupKey].dates.push(h.date);
-            });
-            groupedHistory.sort((a, b) => {
-                const da = parseSpanishDate(a.dates[0]);
-                const db = parseSpanishDate(b.dates[0]);
-                return (da && db) ? da - db : 0;
             });
 
             const variantList = Object.values(p.variants).map(v => {
@@ -1537,6 +1622,10 @@
         });
 
         return result.sort((a, b) => {
+            if (sortBy === 'spent') {
+                if (b.totalSpent !== a.totalSpent) return b.totalSpent - a.totalSpent;
+                return b.quantity - a.quantity;
+            }
             if (b.quantity !== a.quantity) return b.quantity - a.quantity;
             return b.totalSpent - a.totalSpent;
         });
@@ -1882,19 +1971,18 @@
         }
 
         pendingList.sort((a, b) => {
-            const da = parseSpanishDate(ordersMap[a.name]?.date);
-            const db = parseSpanishDate(ordersMap[b.name]?.date);
-            if (da && db && da.getTime() !== db.getTime()) return db.getTime() - da.getTime();
-            if (da && !db) return -1;
-            if (!da && db) return 1;
+            const na = parseInt(String(a.name).replace(/\D/g, ''), 10) || 0;
+            const nb = parseInt(String(b.name).replace(/\D/g, ''), 10) || 0;
+            if (na !== nb) return nb - na;
 
             const gida = parseInt(String(a.gid || '').replace(/\D/g, ''), 10) || 0;
             const gidb = parseInt(String(b.gid || '').replace(/\D/g, ''), 10) || 0;
             if (gida !== gidb) return gidb - gida;
 
-            const na = parseInt(String(a.name).replace(/\D/g, ''), 10) || 0;
-            const nb = parseInt(String(b.name).replace(/\D/g, ''), 10) || 0;
-            return nb - na;
+            const da = parseSpanishDate(ordersMap[a.name]?.date);
+            const db = parseSpanishDate(ordersMap[b.name]?.date);
+            if (da && db) return db.getTime() - da.getTime();
+            return 0;
         });
 
         isSyncingDetails = true;
