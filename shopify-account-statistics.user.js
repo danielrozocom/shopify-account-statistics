@@ -12,6 +12,7 @@
     'use strict';
 
     const STORAGE_KEY = 'shopify_orders_database';
+    const SYNC_PROGRESS_KEY = 'shopify_sync_progress';
     let currentFilterMode = 'all'; // 'all', 'month', 'year', 'custom'
     let currentDiscountFilter = 'all'; // 'all', 'with_discount', 'without_discount', or specific code string
     let customStartDate = '';
@@ -59,7 +60,7 @@
     const SVG_ICONS = {
         boxes: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>`,
         wallet: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1v-3"/><path d="M15 12h6v4h-6z"/></svg>`,
-        receipt: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1Z"/><path d="M8 7h8"/><path d="M8 11h8"/><path d="M8 15h5"/></svg>`,
+        receipt: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M8 7h8"/><path d="M8 11h8"/><path d="M8 15h5"/></svg>`,
         piggy: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h3v-2h4v2h3v-3.5c1.7-1.2 2-2.7 2-4.5 0-2.5 0-4.5-2-4.5h-1"/><circle cx="7" cy="11" r="1"/></svg>`,
         chart: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="m3 3 7 7 4-4 7 7"/><path d="M14 13h7v7"/></svg>`,
         check: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>`,
@@ -67,17 +68,18 @@
         cloudDown: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M4 14.89 4.13 14c.48-3.32 3.32-6 6.87-6 2.56 0 4.83 1.39 6.06 3.44.22-.04.44-.06.67-.06 2.49 0 4.5 2.01 4.5 4.5 0 2.37-1.83 4.31-4.16 4.49"/><path d="m12 12v9"/><path d="m8 17 4 4 4-4"/></svg>`,
         refresh: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>`,
         trash: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>`,
-        calendar: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;color:#6b21a8;"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>`,
-        tags: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;color:#6b21a8;"><path d="M12 2H2v10l11.29 11.29a1 1 0 0 0 1.41 0l7.58-7.58a1 1 0 0 0 0-1.41L12 2Z"/><circle cx="7" cy="7" r="1.5"/></svg>`,
+        calendar: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>`,
+        tags: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M12 2H2v10l11.29 11.29a1 1 0 0 0 1.41 0l7.58-7.58a1 1 0 0 0 0-1.41L12 2Z"/><circle cx="7" cy="7" r="1.5"/></svg>`,
         tagInline: `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-left:2px;margin-right:2px;"><path d="M12 2H2v10l11.29 11.29a1 1 0 0 0 1.41 0l7.58-7.58a1 1 0 0 0 0-1.41L12 2Z"/><circle cx="7" cy="7" r="1.5"/></svg>`,
         arrowUp: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>`,
         arrowDown: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>`,
         alert: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>`,
+        stop: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><circle cx="12" cy="12" r="10"/><line x1="6" x2="18" y1="6" y2="18"/></svg>`,
         search: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>`,
         trophy: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;color:#d97706;"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>`,
         bag: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><line x1="3" x2="21" y1="6" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`,
-        note: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:3px;color:#b45309;"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>`,
-        card: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:3px;color:#2563eb;"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>`,
+        note: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:3px;"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>`,
+        card: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:3px;"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>`,
         close: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`
     };
 
@@ -138,32 +140,47 @@
             if (text.includes('cargar más') || text.includes('ver más') || text.includes('mostrar más') || text.includes('show more') || text.includes('load more') || text.includes('siguiente')) {
                 return btn;
             }
+            const label = ((btn.getAttribute('aria-label') || '') + ' ' + (btn.getAttribute('title') || '')).toLowerCase();
+            if (label.includes('cargar más') || label.includes('ver más') || label.includes('mostrar más') || label.includes('show more') || label.includes('load more') || label.includes('siguiente')) {
+                return btn;
+            }
         }
         return null;
     }
 
-    async function loadAllOrders() {
+    async function loadAllOrders(withScroll = false) {
         if (isAutoLoadingAll) return;
         isAutoLoadingAll = true;
         updateDashboard();
 
         let count = 0;
-        const maxAttempts = 100;
+        const maxAttempts = 200;
+
+        const ensureButton = async () => {
+            if (withScroll) window.scrollTo({ top: document.body.scrollHeight, behavior: 'auto' });
+            for (let i = 0; i < 8; i++) {
+                const b = getPaginationButton();
+                if (b) return b;
+                await new Promise(resolve => setTimeout(resolve, 600));
+                scanDOMOrders();
+                if (withScroll) window.scrollTo({ top: document.body.scrollHeight, behavior: 'auto' });
+            }
+            return null;
+        };
 
         while (count < maxAttempts) {
-            const loadBtn = getPaginationButton();
+            const loadBtn = await ensureButton();
             if (!loadBtn) break;
-
-            // Cargar en segundo plano sin forzar scroll visual en cada paso
             loadBtn.click();
             count++;
-
-            await new Promise(resolve => setTimeout(resolve, 800));
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            scanDOMOrders();
         }
 
         isAutoLoadingAll = false;
+        hasMorePagesDetected = false;
         updateDashboard();
-        syncMissingOrderDetails();
+        await syncMissingOrderDetails(null, true);
     }
 
     async function scrollToOrder(position) {
@@ -177,7 +194,7 @@
         } else if (position === 'last') {
             const pagBtn = getPaginationButton();
             if (pagBtn) {
-                await loadAllOrders();
+                await loadAllOrders(true);
             }
 
             const articles = document.querySelectorAll('article');
@@ -304,6 +321,7 @@
             align-items: center;
             justify-content: center;
             box-sizing: border-box;
+            padding: 24px;
         `;
 
         let top10RowsHtml = '';
@@ -329,6 +347,20 @@
                     priceHistoryHtml = `<span style="font-size: 11px; color: #70647a;">–</span>`;
                 }
                 const periodChipHtml = p.dateRangeStr ? `<span style="font-size: 10px; color: #70647a; background: #f8f5fb; border: 1px solid #e9ddf5; padding: 2px 8px; border-radius: 10px; white-space: nowrap;">📅 ${p.dateRangeStr}</span>` : '';
+
+                const histEntries = Array.isArray(p.history) ? p.history : [];
+                const conDescCount = histEntries.filter(h => h.discountAmount > 0).length;
+                const sinDescCount = histEntries.length - conDescCount;
+                let discountChipHtml = '';
+                if (histEntries.length > 0) {
+                    if (conDescCount > 0 && sinDescCount > 0) {
+                        discountChipHtml = `<span style="font-size: 10px; font-weight: 600; color: #b45309; background: #fef3c7; border: 1px solid #fde68a; padding: 2px 8px; border-radius: 10px; white-space: nowrap;">🎁 Con desc. ${conDescCount} · Sin desc. ${sinDescCount}</span>`;
+                    } else if (conDescCount > 0) {
+                        discountChipHtml = `<span style="font-size: 10px; font-weight: 600; color: #b45309; background: #fef3c7; border: 1px solid #fde68a; padding: 2px 8px; border-radius: 10px; white-space: nowrap;">🎁 Con desc. en ${conDescCount} compra(s)</span>`;
+                    } else {
+                        discountChipHtml = `<span style="font-size: 10px; font-weight: 600; color: #94a3b8; background: #f1f5f9; border: 1px solid #e2e8f0; padding: 2px 8px; border-radius: 10px; white-space: nowrap;">Sin descuento</span>`;
+                    }
+                }
 
                 let variantBadgeHtml = '';
                 if (Array.isArray(p.variantList) && p.variantList.length > 0) {
@@ -381,26 +413,28 @@
                             const next = grouped[gIdx + 1];
                             const curPrice = g.unitPricePaid;
                             const nextPrice = next.unitPricePaid;
+                            const curTag = g.discountAmount > 0 ? ' (con desc.)' : ' (sin desc.)';
+                            const nextTag = next.discountAmount > 0 ? ' (con desc.)' : ' (sin desc.)';
                             const eps = 0.005;
                             if (nextPrice > curPrice + eps) {
                                 const diff = nextPrice - curPrice;
                                 const pct = curPrice > 0 ? ((diff / curPrice) * 100).toFixed(1) : '0';
                                 changeConnectorHtml = `
                                     <div style="display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0 0 2px 0; padding: 3px 8px; font-size: 11px; font-weight: 700; color: #c2410c; background: #fff7ed; border: 1px solid #ffedd5; border-radius: 8px; text-align: center;">
-                                        📈 El precio subió: ${formatCurrency(curPrice)} → ${formatCurrency(nextPrice)} / und. (+${pct}%)
+                                        📈 El precio subió: ${formatCurrency(curPrice)}${curTag} → ${formatCurrency(nextPrice)}${nextTag} / und. (+${pct}%)
                                     </div>`;
                             } else if (nextPrice < curPrice - eps) {
                                 const diff = curPrice - nextPrice;
                                 const pct = curPrice > 0 ? ((diff / curPrice) * 100).toFixed(1) : '0';
                                 changeConnectorHtml = `
                                     <div style="display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0 0 2px 0; padding: 3px 8px; font-size: 11px; font-weight: 700; color: #2e7d32; background: #e9f7ef; border: 1px solid #c8ecd8; border-radius: 8px; text-align: center;">
-                                        📉 El precio bajó: ${formatCurrency(curPrice)} → ${formatCurrency(nextPrice)} / und. (-${pct}%)
+                                        📉 El precio bajó: ${formatCurrency(curPrice)}${curTag} → ${formatCurrency(nextPrice)}${nextTag} / und. (-${pct}%)
                                     </div>`;
                             }
                         }
 
                         return `
-                            <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; background: #ffffff; border: 1px solid #e9d5ff; border-radius: 8px; font-size: 11px; margin-bottom: 2px; box-shadow: 0 1px 3px rgba(0,0,0,0.03); gap: 10px; flex-wrap: wrap;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; background: #ffffff; border: 1px solid #e9d5ff; border-radius: 8px; font-size: 11px; margin-bottom: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.03); gap: 10px; flex-wrap: wrap;">
                                 <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                                     ${variantChip}
                                     <span style="font-weight: 700; color: #2e7d32; background: #e9f7ef; border: 1px solid #c8ecd8; padding: 1px 6px; border-radius: 4px; white-space:nowrap;">× ${countLabel}</span>
@@ -414,7 +448,7 @@
                                     ${savedStr ? `<span style="background: #fef3c7; color: #b45309; border: 1px solid #fde68a; padding: 2px 8px; border-radius: 6px; font-weight: 600; font-size: 10px; white-space:nowrap;">🎁 Ahorro ${savedStr}/und. ${g.discountCode ? `(${g.discountCode})` : ''}</span>` : `<span style="color: #94a3b8; font-size: 10px;">Sin descuento</span>`}
                                 </div>
                             </div>
-                            <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 2px 12px 8px 12px; font-size: 11px; color: #4a3e56;">
+                            <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 4px 14px 10px 14px; font-size: 11px; color: #4a3e56;">
                                 <span style="font-weight: 600;">Pedidos:</span> ${orderLinks}
                             </div>
                             ${changeConnectorHtml}
@@ -446,8 +480,8 @@
 
                 top10RowsHtml += `
                     <tr style="border-bottom: 1px solid #f0ecf4;">
-                        <td style="padding: 10px 12px; font-weight: 700; color: #9333ea; font-size: 13px;">#${idx + 1}</td>
-                        <td style="padding: 10px 12px;">
+                        <td style="padding: 12px 14px; font-weight: 700; color: #9333ea; font-size: 13px;">#${idx + 1}</td>
+                        <td style="padding: 12px 14px;">
                             <div style="display: flex; align-items: center; gap: 10px;">
                                 ${imgHtml}
                                 <div>
@@ -456,14 +490,14 @@
                                 </div>
                             </div>
                         </td>
-                        <td style="padding: 10px 12px; text-align: center; font-weight: 700; color: #16081e; font-size: 13px;">${p.quantity} und.</td>
-                        <td style="padding: 10px 12px; text-align: center;">
+                        <td style="padding: 12px 14px; text-align: center; font-weight: 700; color: #16081e; font-size: 13px;">${p.quantity} und.</td>
+                        <td style="padding: 12px 14px; text-align: center;">
                             <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
                                 <div>${priceHistoryHtml}</div>
-                                ${(periodChipHtml || toggleHistoryBtn) ? `<div style="display: flex; align-items: center; justify-content: center; gap: 4px; flex-wrap: wrap;">${periodChipHtml}${toggleHistoryBtn}</div>` : ''}
+                                ${(periodChipHtml || toggleHistoryBtn || discountChipHtml) ? `<div style="display: flex; align-items: center; justify-content: center; gap: 4px; flex-wrap: wrap;">${periodChipHtml}${discountChipHtml}${toggleHistoryBtn}</div>` : ''}
                             </div>
                         </td>
-                        <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #2e7d32; font-size: 13px; white-space: nowrap;">${formatCurrency(p.totalSpent)}</td>
+                        <td style="padding: 12px 14px; text-align: right; font-weight: 700; color: #2e7d32; font-size: 13px; white-space: nowrap;">${formatCurrency(p.totalSpent)}</td>
                     </tr>
                     ${historySubRowHtml}
                 `;
@@ -483,11 +517,11 @@
                 }
                 discountRowsHtml += `
                     <tr style="border-bottom: 1px solid #f0ecf4;">
-                        <td style="padding: 10px 12px; font-weight: 700; color: #b45309; font-size: 13px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                        <td style="padding: 12px 14px; font-weight: 700; color: #b45309; font-size: 13px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
                             ${SVG_ICONS.tagInline} ${d.code} ${typeBadgeHtml}
                         </td>
-                        <td style="padding: 10px 12px; text-align: center; font-weight: 600; font-size: 13px; color: #16081e;">${d.count} ${d.count === 1 ? 'pedido' : 'pedidos'}</td>
-                        <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #2e7d32; font-size: 13px;">${formatCurrency(d.totalSaved)} ahorrado</td>
+                        <td style="padding: 12px 14px; text-align: center; font-weight: 600; font-size: 13px; color: #16081e;">${d.count} ${d.count === 1 ? 'pedido' : 'pedidos'}</td>
+                        <td style="padding: 12px 14px; text-align: right; font-weight: 700; color: #2e7d32; font-size: 13px;">${formatCurrency(d.totalSaved)} ahorrado</td>
                     </tr>
                 `;
             });
@@ -500,19 +534,19 @@
             paymentBreakdown.forEach((pm) => {
                 paymentRowsHtml += `
                     <tr style="border-bottom: 1px solid #f0ecf4;">
-                        <td style="padding: 10px 12px; font-weight: 600; color: #1d4ed8; font-size: 13px; display: flex; align-items: center; gap: 6px;">
+                        <td style="padding: 12px 14px; font-weight: 600; color: #1d4ed8; font-size: 13px; display: flex; align-items: center; gap: 6px;">
                             ${SVG_ICONS.card} ${pm.method}
                         </td>
-                        <td style="padding: 10px 12px; text-align: center; font-weight: 600; font-size: 13px; color: #16081e;">${pm.count} ${pm.count === 1 ? 'pedido' : 'pedidos'}</td>
-                        <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #16081e; font-size: 13px;">${formatCurrency(pm.totalSpent)}</td>
+                        <td style="padding: 12px 14px; text-align: center; font-weight: 600; font-size: 13px; color: #16081e;">${pm.count} ${pm.count === 1 ? 'pedido' : 'pedidos'}</td>
+                        <td style="padding: 12px 14px; text-align: right; font-weight: 700; color: #16081e; font-size: 13px;">${formatCurrency(pm.totalSpent)}</td>
                     </tr>
                 `;
             });
         }
 
         modal.innerHTML = `
-            <div style="background: #ffffff; border-radius: 16px; width: 100%; max-width: 720px; max-height: 85vh; overflow-y: auto; box-shadow: 0 20px 50px rgba(0,0,0,0.3); border: 2px solid #9333ea; font-family: 'Poppins', sans-serif;">
-                <div style="padding: 20px 24px; border-bottom: 1px solid #f0ecf4; display: flex; align-items: center; justify-content: space-between; background: linear-gradient(135deg, #f8f5fb 0%, #ffffff 100%); border-top-left-radius: 14px; border-top-right-radius: 14px; sticky: top;">
+            <div style="background: #ffffff; border-radius: 16px; width: max-content; max-width: 960px; max-height: 85vh; overflow: auto; box-shadow: 0 20px 50px rgba(0,0,0,0.3); border: 2px solid #9333ea; font-family: 'Poppins', sans-serif;">
+                <div style="padding: 24px 28px; border-bottom: 1px solid #f0ecf4; display: flex; align-items: center; justify-content: space-between; background: linear-gradient(135deg, #f8f5fb 0%, #ffffff 100%); border-top-left-radius: 14px; border-top-right-radius: 14px; sticky: top;">
                     <div style="display: flex; align-items: center; gap: 10px;">
                         <span style="font-size: 22px;">🏆</span>
                         <div>
@@ -525,21 +559,21 @@
                     </button>
                 </div>
 
-                <div style="padding: 20px 24px;">
+                <div style="padding: 28px 32px;">
                     <!-- Seccion Productos Mas Comprados -->
-                    <div style="margin-bottom: 24px;">
-                        <h3 style="margin: 0 0 12px 0; font-size: 15px; font-weight: 700; color: #9333ea; display: flex; align-items: center; gap: 6px;">
+                    <div style="margin-bottom: 28px;">
+                        <h3 style="margin: 0 0 14px 0; font-size: 15px; font-weight: 700; color: #9333ea; display: flex; align-items: center; gap: 6px;">
                             ${SVG_ICONS.trophy} Productos Más Comprados
                         </h3>
-                        <div style="border: 1px solid #e2d8ee; border-radius: 10px; overflow: hidden;">
+                        <div style="border: 1px solid #e2d8ee; border-radius: 10px; overflow-x: auto;">
                             <table style="width: 100%; border-collapse: collapse; text-align: left;">
                                 <thead>
                                     <tr style="background: #f8f5fb; border-bottom: 1px solid #e2d8ee; font-size: 11px; color: #70647a; text-transform: uppercase;">
-                                        <th style="padding: 8px 12px; width: 40px;">Pos</th>
-                                        <th style="padding: 8px 12px;">Producto</th>
-                                        <th style="padding: 8px 12px; text-align: center;">Unidades</th>
-                                        <th style="padding: 8px 12px; text-align: center;">Precio Unitario / Histórico</th>
-                                        <th style="padding: 8px 12px; text-align: right;">Total Invertido</th>
+                                        <th style="padding: 10px 14px; width: 40px;">Pos</th>
+                                        <th style="padding: 10px 14px;">Producto</th>
+                                        <th style="padding: 10px 14px; text-align: center;">Unidades</th>
+                                        <th style="padding: 10px 14px; text-align: center;">Precio Unitario / Histórico</th>
+                                        <th style="padding: 10px 14px; text-align: right;">Total Invertido</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -550,17 +584,17 @@
                     </div>
 
                     <!-- Seccion Descuentos y Cupones -->
-                    <div style="margin-bottom: 24px;">
-                        <h3 style="margin: 0 0 12px 0; font-size: 15px; font-weight: 700; color: #b45309; display: flex; align-items: center; gap: 6px;">
+                    <div style="margin-bottom: 28px;">
+                        <h3 style="margin: 0 0 14px 0; font-size: 15px; font-weight: 700; color: #b45309; display: flex; align-items: center; gap: 6px;">
                             ${SVG_ICONS.piggy} Descuentos & Cupones Aplicados
                         </h3>
                         <div style="border: 1px solid #fef3c7; border-radius: 10px; overflow: hidden;">
                             <table style="width: 100%; border-collapse: collapse; text-align: left;">
                                 <thead>
                                     <tr style="background: #fff8e1; border-bottom: 1px solid #fef3c7; font-size: 11px; color: #b45309; text-transform: uppercase;">
-                                        <th style="padding: 8px 12px;">Código de Cupón</th>
-                                        <th style="padding: 8px 12px; text-align: center;">Uso</th>
-                                        <th style="padding: 8px 12px; text-align: right;">Total Ahorrado</th>
+                                        <th style="padding: 10px 14px;">Código de Cupón</th>
+                                        <th style="padding: 10px 14px; text-align: center;">Uso</th>
+                                        <th style="padding: 10px 14px; text-align: right;">Total Ahorrado</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -572,16 +606,16 @@
 
                     <!-- Seccion Medios de Pago -->
                     <div>
-                        <h3 style="margin: 0 0 12px 0; font-size: 15px; font-weight: 700; color: #1d4ed8; display: flex; align-items: center; gap: 6px;">
+                        <h3 style="margin: 0 0 14px 0; font-size: 15px; font-weight: 700; color: #1d4ed8; display: flex; align-items: center; gap: 6px;">
                             ${SVG_ICONS.card} Medios de Pago Utilizados
                         </h3>
                         <div style="border: 1px solid #dbeafe; border-radius: 10px; overflow: hidden;">
                             <table style="width: 100%; border-collapse: collapse; text-align: left;">
                                 <thead>
                                     <tr style="background: #eff6ff; border-bottom: 1px solid #dbeafe; font-size: 11px; color: #1d4ed8; text-transform: uppercase;">
-                                        <th style="padding: 8px 12px;">Medio de Pago</th>
-                                        <th style="padding: 8px 12px; text-align: center;">Pedidos</th>
-                                        <th style="padding: 8px 12px; text-align: right;">Monto Total</th>
+                                        <th style="padding: 10px 14px;">Medio de Pago</th>
+                                        <th style="padding: 10px 14px; text-align: center;">Pedidos</th>
+                                        <th style="padding: 10px 14px; text-align: right;">Monto Total</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -615,7 +649,40 @@
         modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
     }
 
+    let currentRoutePath = window.location.pathname;
+    let detailPageMatch = currentRoutePath.match(/account\/orders\/([0-9]+)$/);
+    let isOrderDetailPage = !!detailPageMatch;
+    let detailOrderId = detailPageMatch ? detailPageMatch[1] : null;
+
+    function handleRouteChange() {
+        const newPath = window.location.pathname;
+        if (newPath === currentRoutePath) return;
+        currentRoutePath = newPath;
+        detailPageMatch = newPath.match(/account\/orders\/([0-9]+)$/);
+        isOrderDetailPage = !!detailPageMatch;
+        detailOrderId = detailPageMatch ? detailPageMatch[1] : null;
+        detailPageForcedRefresh = false;
+        if (isOrderDetailPage) {
+            document.getElementById('shopify-top-analytics-panel')?.remove();
+            document.getElementById('shopify-nav-floating-container')?.remove();
+            setTimeout(() => {
+                const cached = getStoredOrders();
+                if (Object.keys(cached).length > 0) injectOrderDetailSummary();
+                else syncMissingOrderDetails();
+            }, 900);
+        } else {
+            renderNavFloatingButtons();
+            updateDashboard(true);
+        }
+    }
+    setInterval(handleRouteChange, 1000);
+
     function renderPanel(count, totalSpentFormatted, totalGrossFormatted, totalSavingsFormatted, avgFormatted, statusText, statusBgColor = null, isLoading = false) {
+        if (isOrderDetailPage) {
+            const existingPanel = document.getElementById('shopify-top-analytics-panel');
+            if (existingPanel) existingPanel.remove();
+            return;
+        }
         let panel = document.getElementById('shopify-top-analytics-panel');
         const themeColor = getShopifyBrandColor();
         const badgeColor = statusBgColor || themeColor;
@@ -876,6 +943,7 @@
                     isAutoLoadingAll = false;
                     pendingSyncTotal = 0;
                     pendingSyncCurrent = 0;
+                    clearSyncProgress();
                     updateDashboard(true);
                     logAnalytics('🛑 Sincronización detenida por el usuario.');
                 };
@@ -891,31 +959,23 @@
                     pendingSyncCurrent = 0;
                     let currentOrders = getStoredOrders();
                     for (const k in currentOrders) {
-                        if (currentOrders[k]) currentOrders[k].detailFetched = false;
+                        if (currentOrders[k]) {
+                            currentOrders[k].detailFetched = false;
+                            currentOrders[k].verifiedNoDiscount = false;
+                            currentOrders[k].syncAttempts = 0;
+                        }
                     }
                     saveStoredOrders(currentOrders);
                     updateDashboard(true);
 
-                    const pagBtn = getPaginationButton();
-                    if (pagBtn) {
-                        await loadAllOrders();
-                    } else {
-                        await syncMissingOrderDetails();
-                    }
+                    await loadAllOrders();
+                    updateDashboard(true);
                 };
             }
 
             const btnClearStorage = document.getElementById('shopify-btn-clear-storage');
             if (btnClearStorage) {
-                btnClearStorage.onclick = () => {
-                    if (confirm('¿Deseas borrar toda la memoria guardada de los pedidos en este navegador?')) {
-                        localStorage.removeItem(STORAGE_KEY);
-                        currentFilterMode = 'all';
-                        currentDiscountFilter = 'all';
-                        updateDashboard();
-                        loadAllOrders();
-                    }
-                };
+                btnClearStorage.onclick = () => askClearStorage();
             }
         } else {
             const countEl = panel.querySelector('#shopify-stat-count');
@@ -1470,7 +1530,8 @@
         const v = String(value).trim();
         if (!v) return null;
         const lower = v.toLowerCase();
-        if (lower === 'card' || lower === 'tarjeta credito/debito' || lower === 'tarjeta crédito/débito' || lower === 'tarjeta') return 'Tarjeta crédito/débito';
+        if (lower === 'tarjeta credito/debito' || lower === 'tarjeta crédito/débito' || lower === 'tarjeta de crédito/débito') return 'Tarjeta crédito/débito';
+        if (lower === 'card' || lower === 'tarjeta' || lower === 'cardpayment' || lower === 'card payment') return null;
         if (['sale', 'authorization', 'capture', 'void', 'refund', 'pending', 'success', 'error'].includes(lower)) return null;
         return v;
     }
@@ -1478,15 +1539,27 @@
     function extractPaymentMethodFromObj(obj) {
         if (!obj || typeof obj !== 'object') return null;
 
-        const transactions = obj.transactions || obj.paymentCollections?.nodes?.[0]?.transactions || obj.data?.order?.transactions;
-        if (Array.isArray(transactions) && transactions.length > 0) {
+        const txSources = [
+            obj.transactions,
+            obj.paymentMethods,
+            obj.paymentCollections?.nodes?.[0]?.transactions,
+            obj.paymentCollections?.nodes?.[0]?.paymentMethods,
+            obj.paymentCollections?.nodes?.map(n => n.paymentMethods).flat(),
+            obj.data?.order?.transactions,
+            obj.data?.order?.paymentMethods,
+            obj.data?.order?.paymentCollections?.nodes?.[0]?.transactions,
+            obj.data?.order?.paymentCollections?.nodes?.[0]?.paymentMethods
+        ].filter(Array.isArray);
+        const transactions = txSources.flat();
+        if (transactions.length > 0) {
+            let bestName = null;
+            let bestCardInfo = '';
+
             for (const tx of transactions) {
                 if (!tx || typeof tx !== 'object') continue;
 
-                const name = tx.typeDetails?.name || tx.paymentDetails?.paymentMethodName || tx.gateway;
                 const details = tx.paymentDetails;
                 let cardInfo = '';
-
                 if (details) {
                     if (details.cardBrand && details.last4) {
                         cardInfo = `${details.cardBrand} •••• ${details.last4}`;
@@ -1497,14 +1570,35 @@
                     }
                 }
 
-                if (name) {
-                    const cleanName = cleanPaymentMethodLabel(name);
-                    if (cleanName) return cardInfo ? `${cleanName} (${cardInfo})` : cleanName;
+                const gatewayName = tx.gateway ? cleanPaymentMethodLabel(tx.gateway) : null;
+                const iconName = tx.paymentIcon?.altText ? cleanPaymentMethodLabel(tx.paymentIcon.altText) : null;
+                const methodName = tx.paymentDetails?.paymentMethodName ? cleanPaymentMethodLabel(tx.paymentDetails.paymentMethodName) : null;
+                const typeName = tx.typeDetails?.name ? cleanPaymentMethodLabel(tx.typeDetails.name) : null;
+                const directName = tx.name ? cleanPaymentMethodLabel(tx.name) : null;
+                const localBrand = tx.paymentDetails?.brand ? cleanPaymentMethodLabel(tx.paymentDetails.brand) : null;
+
+                const isGeneric = (n) => n === 'Tarjeta crédito/débito' || n === 'Card' || n === 'CardPayment';
+
+                if (gatewayName) {
+                    bestName = gatewayName;
+                    if (cardInfo) bestCardInfo = cardInfo;
+                    break;
                 }
-                if (cardInfo) return cardInfo;
-                const typeLabel = cleanPaymentMethodLabel(tx.type);
-                if (typeLabel) return typeLabel;
+                const candidate = localBrand || typeName || methodName || iconName || directName;
+                if (candidate) {
+                    if (!bestName) {
+                        bestName = candidate;
+                        if (cardInfo) bestCardInfo = cardInfo;
+                    } else if (isGeneric(bestName) && !isGeneric(candidate)) {
+                        bestName = candidate;
+                        if (cardInfo) bestCardInfo = cardInfo;
+                    }
+                }
+                if (cardInfo && !bestCardInfo) bestCardInfo = cardInfo;
             }
+
+            if (bestName) return bestCardInfo ? `${bestName} (${bestCardInfo})` : bestName;
+            if (bestCardInfo) return bestCardInfo;
         }
 
         if (obj.paymentMethodName && typeof obj.paymentMethodName === 'string') return cleanPaymentMethodLabel(obj.paymentMethodName);
@@ -1512,7 +1606,10 @@
             if (typeof obj.paymentMethod === 'string') return cleanPaymentMethodLabel(obj.paymentMethod);
             if (typeof obj.paymentMethod === 'object' && obj.paymentMethod.name) return cleanPaymentMethodLabel(obj.paymentMethod.name);
         }
+        if (obj.transactionGateway && typeof obj.transactionGateway === 'string') return cleanPaymentMethodLabel(obj.transactionGateway);
         if (obj.gateway && typeof obj.gateway === 'string') return cleanPaymentMethodLabel(obj.gateway);
+        if (obj.data?.order?.transactionGateway && typeof obj.data.order.transactionGateway === 'string') return cleanPaymentMethodLabel(obj.data.order.transactionGateway);
+        if (obj.data?.order?.paymentMethodName && typeof obj.data.order.paymentMethodName === 'string') return cleanPaymentMethodLabel(obj.data.order.paymentMethodName);
 
         return null;
     }
@@ -1566,9 +1663,9 @@
             }
             const note = extractedNote || existing.note || null;
             const extractedPaymentMethod = extractPaymentMethodFromObj(obj);
-            const paymentMethod = extractedPaymentMethod || (existing.paymentMethod && existing.paymentMethod !== 'CARD' ? existing.paymentMethod : null);
-
-            const hasDetailInfo = isDetailResponse || discountCode !== null || discountAmount > 0 || priceBeforeNum !== null || (combinedItems && combinedItems.length > 0);
+            const paymentMethod = isDetailResponse
+                ? (extractedPaymentMethod || (existing.paymentMethod && existing.paymentMethod !== 'CARD' ? existing.paymentMethod : null))
+                : (existing.paymentMethod || null);
 
             uniqueOrders[targetKey] = {
                 price: priceNum,
@@ -1578,7 +1675,7 @@
                 discountCode: discountCode || existing.discountCode || null,
                 discountType: discountType || existing.discountType || null,
                 gid: gid || existing.gid || null,
-                detailFetched: hasDetailInfo ? true : (existing.detailFetched || false),
+                detailFetched: isDetailResponse ? true : (existing.detailFetched || false),
                 verifiedNoDiscount: isDetailResponse ? true : (existing.verifiedNoDiscount || false),
                 items: combinedItems,
                 note: note,
@@ -1599,6 +1696,54 @@
     let isSyncingDetails = false;
     let pendingSyncTotal = 0;
     let pendingSyncCurrent = 0;
+    let pendingSyncOrderName = '';
+    let detailPageForcedRefresh = false;
+
+    function saveSyncProgress() {
+        try {
+            localStorage.setItem(SYNC_PROGRESS_KEY, JSON.stringify({
+                total: pendingSyncTotal,
+                current: pendingSyncCurrent,
+                orderName: pendingSyncOrderName,
+                timestamp: Date.now()
+            }));
+        } catch (e) { }
+    }
+
+    function clearSyncProgress() {
+        try { localStorage.removeItem(SYNC_PROGRESS_KEY); } catch (e) { }
+    }
+
+    function hasInterruptedSync() {
+        try {
+            const raw = localStorage.getItem(SYNC_PROGRESS_KEY);
+            if (!raw) return false;
+            const data = JSON.parse(raw);
+            const age = Date.now() - (data.timestamp || 0);
+            if (age > 10 * 60 * 1000) {
+                clearSyncProgress();
+                return false;
+            }
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    const TRANSACTIONS_FRAGMENT = `
+      transactions {
+        id
+        kind
+        status
+        type
+        typeDetails { name }
+        paymentIcon { altText }
+        paymentDetails {
+          ... on CardPaymentDetails { last4 cardBrand }
+          ... on CustomGiftCardPaymentDetails { last4 }
+          ... on LocalPaymentMethodsPaymentDetails { brand paymentDescriptor }
+        }
+      }`;
 
     const ORDER_DETAILS_QUERY = `query OrderDetails($orderId: ID!) {
   order(id: $orderId) {
@@ -1608,68 +1753,15 @@
     note
     customAttributes { key value }
     currentTotalPrice: totalPrice { amount currencyCode }
-    subtotal: subtotalBeforeDiscounts { amount currencyCode }
-    totalSavings { amount currencyCode }
-    transactions {
-      id
-      kind
-      status
-      type
-      typeDetails { name }
-      paymentDetails {
-        ... on CardPaymentDetails { cardBrand last4 }
-        ... on CustomGiftCardPaymentDetails { last4 }
-        ... on LocalPaymentMethodsPaymentDetails { paymentMethodName }
-      }
-    }
-    discountApplications(first: 50) {
-      nodes {
-        ... on AutomaticDiscountApplication { title }
-        ... on DiscountCodeApplication { code }
-        ... on ManualDiscountApplication { title }
-      }
-    }
-    discountInformation {
-      allOrderLevelAppliedDiscounts: allOrderLevelAppliedDiscountsOnSoldItems {
-        title
-        targetType
-        discountApplicationType
-        discountValue { amount currencyCode }
-      }
-    }
-    lineItemContainers {
-      ... on RemainingLineItemContainer {
-        lineItems(first: 250) {
-          nodes {
-            lineItem {
-              totalPriceBeforeDiscounts { amount currencyCode }
-              totalPriceWithDiscounts { amount currencyCode }
-              discountAllocations {
-                allocatedAmount { amount currencyCode }
-                discountApplication {
-                  ... on AutomaticDiscountApplication { title }
-                  ... on DiscountCodeApplication { code }
-                  ... on ManualDiscountApplication { title }
-                }
-              }
-              discountInformation { title discountValue { amount currencyCode } }
-              image { url altText }
-              title
-              variantTitle
-              variantOptions { name value }
-              quantity
-              onlineStoreUrl
-            }
-          }
-        }
-      }
-    }
+    ${TRANSACTIONS_FRAGMENT}
   }
 }`;
 
     const LINE_ITEMS_QUERY = `query LineItems($orderId: ID!, $lineItemsFirst: Int! = 250) {
   order(id: $orderId) {
     id
+    name
+    ${TRANSACTIONS_FRAGMENT}
     lineItems: lineItemContainers {
       ... on RemainingLineItemContainer {
         id
@@ -1705,20 +1797,24 @@
   }
 }`;
 
-    async function syncMissingOrderDetails() {
+    async function syncMissingOrderDetails(forceKey = null, forceRun = false) {
         if (isSyncingDetails || userStoppedSync || isAutoLoadingAll) return;
+        if (!forceRun && !isOrderDetailPage && (getPaginationButton() || hasMorePagesDetected)) return;
         const ordersMap = getStoredOrders();
         const orderKeys = Object.keys(ordersMap);
 
         const pendingList = [];
+        const currentGid = isOrderDetailPage && detailOrderId ? `gid://shopify/Order/${detailOrderId}` : null;
+        const isCurrentOrder = (k, o) => currentGid && (o.gid === currentGid || k === `#${detailOrderId}`);
         for (const key of orderKeys) {
             const order = ordersMap[key];
+            if (isOrderDetailPage && !isCurrentOrder(key, order)) continue;
             const numericMatch = key.match(/\d+/);
             const gid = order.gid || (numericMatch ? `gid://shopify/Order/${numericMatch[0]}` : null);
-            const isFullyVerified = order.detailFetched || order.discountCode || order.verifiedNoDiscount;
+            const isFullyVerified = (order.detailFetched || order.verifiedNoDiscount) && !!order.paymentMethod;
             const attempts = order.syncAttempts || 0;
 
-            if (gid && !isFullyVerified && attempts < 3) {
+            if (gid && (forceKey === key || (!isFullyVerified && attempts < 3))) {
                 pendingList.push({ name: key, gid: gid, attempts: attempts });
             }
         }
@@ -1726,11 +1822,24 @@
         if (pendingList.length === 0) {
             pendingSyncTotal = 0;
             pendingSyncCurrent = 0;
+            pendingSyncOrderName = '';
             return;
         }
 
+        pendingList.sort((a, b) => {
+            const da = parseSpanishDate(ordersMap[a.name]?.date);
+            const db = parseSpanishDate(ordersMap[b.name]?.date);
+            if (da && db) return db - da;
+            if (da) return -1;
+            if (db) return 1;
+            const na = parseInt(String(a.name).replace(/\D/g, ''), 10) || 0;
+            const nb = parseInt(String(b.name).replace(/\D/g, ''), 10) || 0;
+            return nb - na;
+        });
+
         isSyncingDetails = true;
         isSyncCancelled = false;
+        hasMorePagesDetected = false;
         pendingSyncTotal = pendingList.length;
         pendingSyncCurrent = 0;
 
@@ -1758,15 +1867,16 @@
 
                 pendingSyncCurrent = i + 1;
                 const item = pendingList[i];
+                pendingSyncOrderName = item.name;
                 logAnalytics(`🔄 [${i + 1}/${pendingList.length}] Consultando detalles, productos y notas de:`, item.name);
                 const numericId = item.gid.replace('gid://shopify/Order/', '');
                 const remixUrl = `${window.location.origin}${basePath}/account/orders/${numericId}?_data=routes%2Faccount.orders.%24id`;
 
                 let fetchedSuccess = false;
+                let paymentFound = false;
 
                 // Estrategia 1 (PRIMARIA): GraphQL OrderDetails POST — query completa (nota, transacciones, descuentos, ítems, variantes)
-                if (authHeader) {
-                    try {
+                try {
                         const resp = await targetWindow.fetch(graphqlUrl + '?operation=OrderDetails', {
                             method: 'POST',
                             credentials: 'include',
@@ -1790,7 +1900,10 @@
                                 }
                                 let currentOrders = getStoredOrders();
                                 if (extractOrdersFromObj(resJson, currentOrders, true)) {
-                                    if (currentOrders[item.name]) currentOrders[item.name].detailFetched = true;
+                                    if (currentOrders[item.name]) {
+                                        currentOrders[item.name].detailFetched = true;
+                                        if (currentOrders[item.name].paymentMethod) paymentFound = true;
+                                    }
                                     saveStoredOrders(currentOrders);
                                     fetchedSuccess = true;
                                     logAnalytics('✅ [GraphQL OrderDetails] Sincronización exitosa para:', item.name);
@@ -1798,10 +1911,9 @@
                             }
                         }
                     } catch (e1) { }
-                }
 
-                // Estrategia 2 (SECUNDARIA): Remix Data Loader GET Route
-                if (!fetchedSuccess) {
+                // Estrategia 2 (SECUNDARIA): Remix Data Loader GET Route — se corre también si el pago no se encontró en la Estrategia 1
+                if (!fetchedSuccess || !paymentFound) {
                     try {
                         const resp = await targetWindow.fetch(remixUrl, {
                             method: 'GET',
@@ -1829,8 +1941,8 @@
                     } catch (e2) { }
                 }
 
-                // Estrategia 3 (RESPALDO): GraphQL LineItems POST con token Authorization
-                if (!fetchedSuccess && authHeader) {
+                // Estrategia 3 (RESPALDO): GraphQL LineItems POST con token Authorization — también si falta el pago
+                if ((!fetchedSuccess || !paymentFound) && authHeader) {
                     try {
                         const resp = await targetWindow.fetch(graphqlUrl + '?operation=LineItems', {
                             method: 'POST',
@@ -1871,7 +1983,15 @@
                 if (finalOrders[item.name]) {
                     if (fetchedSuccess) {
                         finalOrders[item.name].detailFetched = true;
-                        finalOrders[item.name].syncAttempts = 0;
+                        if (finalOrders[item.name].paymentMethod) {
+                            finalOrders[item.name].syncAttempts = 0;
+                        } else {
+                            const currentAttempts = (finalOrders[item.name].syncAttempts || 0) + 1;
+                            finalOrders[item.name].syncAttempts = currentAttempts;
+                            if (currentAttempts >= 3) {
+                                logAnalytics(`⚠️ Sin método de pago tras ${currentAttempts} intentos para: ${item.name}`);
+                            }
+                        }
                     } else {
                         // Solo incrementar syncAttempts si se contó con token de autorización
                         if (authHeader) {
@@ -1890,6 +2010,7 @@
                     saveStoredOrders(finalOrders);
                 }
 
+                saveSyncProgress();
                 updateDashboard();
                 await new Promise(r => setTimeout(r, 450));
             }
@@ -1897,6 +2018,8 @@
             isSyncingDetails = false;
             pendingSyncTotal = 0;
             pendingSyncCurrent = 0;
+            pendingSyncOrderName = '';
+            clearSyncProgress();
         }
     }
 
@@ -1998,10 +2121,14 @@
                     const clone = response.clone();
                     clone.json().then(res => {
                         let uniqueOrders = getStoredOrders();
-                        if (extractOrdersFromObj(res, uniqueOrders)) {
+                        const looksDetail = (() => {
+                            const o = res?.data?.order;
+                            if (!o) return false;
+                            return Array.isArray(o.transactions) && o.transactions.some(t => t && (t.typeDetails?.name || t.paymentDetails || t.paymentIcon?.altText));
+                        })();
+                        if (extractOrdersFromObj(res, uniqueOrders, looksDetail)) {
                             saveStoredOrders(uniqueOrders);
                             updateDashboard();
-                            syncMissingOrderDetails();
                         }
                     }).catch(() => { });
                 }
@@ -2350,6 +2477,188 @@
         });
     }
 
+    function forceSyncCurrentOrder(orderName) {
+        const trySync = () => {
+            if (isSyncingDetails || isAutoLoadingAll || userStoppedSync) {
+                setTimeout(trySync, 800);
+                return;
+            }
+            syncMissingOrderDetails(orderName);
+        };
+        trySync();
+    }
+
+    function injectOrderDetailSummary() {
+        if (!isOrderDetailPage) return;
+        const ordersMap = getStoredOrders();
+        const gid = `gid://shopify/Order/${detailOrderId}`;
+        let order = null;
+        let orderName = `#${detailOrderId}`;
+
+        for (const k in ordersMap) {
+            const o = ordersMap[k];
+            if (o && (o.gid === gid || k === `#${detailOrderId}`)) {
+                order = o;
+                orderName = k;
+                break;
+            }
+        }
+
+        if (!order) {
+            ordersMap[`#${detailOrderId}`] = { price: 0, date: null, gid: gid, detailFetched: false, verifiedNoDiscount: false, syncAttempts: 0 };
+            saveStoredOrders(ordersMap);
+            order = ordersMap[`#${detailOrderId}`];
+            forceSyncCurrentOrder(orderName);
+        } else if (!detailPageForcedRefresh) {
+            detailPageForcedRefresh = true;
+            const isFullyVerified = (order.detailFetched || order.verifiedNoDiscount) && !!order.paymentMethod;
+            if (!isFullyVerified) {
+                forceSyncCurrentOrder(orderName);
+            }
+        }
+
+        document.getElementById('shopify-order-detail-summary')?.remove();
+
+        const nativeDateEl = findNativeDateElement();
+        if (nativeDateEl && order.date) {
+            nativeDateEl.textContent = `Fecha de confirmación: ${formatOrderDate(order.date)}`;
+        }
+
+        const targetCard = findPaymentTargetCard();
+        if (targetCard) {
+            let infoRow = targetCard.querySelector('#shopify-detail-info');
+            if (!infoRow) {
+                infoRow = document.createElement('div');
+                infoRow.id = 'shopify-detail-info';
+                infoRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 16px 4px;padding:8px 12px;background:#f8f5fb;border:1px solid #e9ddf5;border-radius:8px;font-family:Poppins,sans-serif;';
+                targetCard.appendChild(infoRow);
+            }
+            const chips = [];
+            if (order.paymentMethod) {
+                chips.push(`<span style="font-size:11px;font-weight:700;color:#1d4ed8;background:#eff6ff;border:1px solid #dbeafe;padding:4px 10px;border-radius:8px;white-space:nowrap;">${SVG_ICONS.card} <strong>Pago:</strong> ${order.paymentMethod}</span>`);
+            }
+            infoRow.innerHTML = chips.join('');
+            infoRow.style.display = chips.length ? 'flex' : 'none';
+        }
+
+        injectDetailNote(order);
+    }
+
+    function injectDetailNote(order) {
+        let row = document.getElementById('shopify-detail-note-row');
+        const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        if (!order.note) {
+            if (row) row.remove();
+            return;
+        }
+        let dl = document.querySelector('dl[aria-label="Detalles del pedido"]');
+        if (!dl) {
+            const heading = Array.from(document.querySelectorAll('h2, h3')).find(h => /Detalles del pedido/i.test(h.textContent || ''));
+            if (heading) dl = heading.closest('section')?.querySelector('dl');
+        }
+        if (!dl) return;
+        if (!row) {
+            row = document.createElement('div');
+            row.id = 'shopify-detail-note-row';
+            row.className = '_1fragempz _1fragemrs _1fragemo6 _1fragemtl _1fragem5u _1fragemws yHNVE';
+            dl.insertBefore(row, dl.firstChild);
+        }
+        row.innerHTML = `<dt class="CIq7V"><span class="_19gi7yt0 _19gi7yt18 _19gi7yt1h _19gi7yt1n _1fragem69">Nota</span></dt><dd class="V-ubC Xw6Ln"><p class="_1tx8jg70 _1fragemws _1tx8jg719 _1tx8jg71h _1tx8jg71j"><span class="oBbb8">${esc(order.note)}</span></p></dd>`;
+    }
+
+    function findNativeDateElement() {
+        const candidates = document.querySelectorAll('span, p, div, small, h1, h2, h3, li, strong, td');
+        for (const el of candidates) {
+            if (el.children.length === 0) {
+                const t = (el.textContent || '').trim();
+                if (/Fecha de confirmación/i.test(t) && t.length < 80) return el;
+            }
+        }
+        return null;
+    }
+
+    function findPaymentTargetCard() {
+        let card = document.querySelector('._1fragempp._1fragemrs._1fragemo6._1fragemtl._1fragem5u._1fragemws');
+        if (!card) {
+            const h3s = Array.from(document.querySelectorAll('h3'));
+            const heading = h3s.find(h => /Artículos del pedido/i.test(h.textContent || ''));
+            if (heading) {
+                card = heading.closest('div[class*="_1fragem"]');
+            }
+        }
+        if (!card) {
+            const dl = document.querySelector('dl[aria-label="Detalles del pedido"]');
+            if (dl) {
+                card = dl.closest('div[class*="_1fragem"]') || dl.parentElement;
+            }
+        }
+        return card;
+    }
+
+    function askClearStorage() {
+        const overlay = document.createElement('div');
+        overlay.id = 'shopify-clear-dialog';
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(15,7,26,0.6);display:flex;align-items:center;justify-content:center;z-index:999999;';
+        overlay.innerHTML = `
+            <div style="background:#fff;border-radius:14px;padding:20px 24px;max-width:360px;width:90%;border:2px solid #9333ea;font-family:Poppins,sans-serif;box-shadow:0 20px 50px rgba(0,0,0,.3);">
+                <h3 style="margin:0 0 6px;font-size:15px;color:#16081e;">¿Qué quieres borrar?</h3>
+                <p style="margin:0 0 12px;font-size:12px;color:#70647a;">Los pedidos se mantienen; solo se reinicia la parte de detalles/pago/nota.</p>
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                    <button id="shopify-clear-details-btn" style="padding:10px 12px;border-radius:8px;border:1px solid #dbeafe;background:#eff6ff;color:#1d4ed8;font-weight:700;cursor:pointer;">Solo detalles (re-sincronizar)</button>
+                    <button id="shopify-clear-all-btn" style="padding:10px 12px;border-radius:8px;border:1px solid #fee2e2;background:#fef2f2;color:#b91c1c;font-weight:700;cursor:pointer;">Borrar TODO y recargar página</button>
+                    <button id="shopify-clear-cancel-btn" style="padding:10px 12px;border-radius:8px;border:1px solid #e2d8ee;background:#f8f5fb;color:#70647a;cursor:pointer;">Cancelar</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+        overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+        overlay.querySelector('#shopify-clear-details-btn').onclick = () => {
+            const currentOrders = getStoredOrders();
+            for (const k in currentOrders) {
+                if (currentOrders[k]) {
+                    delete currentOrders[k].paymentMethod;
+                    delete currentOrders[k].note;
+                    currentOrders[k].detailFetched = false;
+                    currentOrders[k].verifiedNoDiscount = false;
+                    currentOrders[k].syncAttempts = 0;
+                }
+            }
+            saveStoredOrders(currentOrders);
+            clearSyncProgress();
+            overlay.remove();
+            userStoppedSync = false;
+            isSyncCancelled = false;
+            updateDashboard(true);
+            loadAllOrders();
+            logAnalytics('🧹 Detalles borrados. Re-sincronizando del más nuevo al más viejo...');
+        };
+
+        overlay.querySelector('#shopify-clear-all-btn').onclick = () => {
+            userStoppedSync = false;
+            isSyncCancelled = true;
+            isSyncingDetails = false;
+            isAutoLoadingAll = false;
+            pendingSyncTotal = 0;
+            pendingSyncCurrent = 0;
+            isFullySynced = false;
+            lastDashboardStateHash = '';
+            localStorage.removeItem(STORAGE_KEY);
+            localStorage.removeItem(SYNC_PROGRESS_KEY);
+            sessionStorage.removeItem('shopify_auth_token');
+            localStorage.removeItem('shopify_auth_token');
+            capturedAuthToken = null;
+            detailPageForcedRefresh = false;
+            currentFilterMode = 'all';
+            currentDiscountFilter = 'all';
+            customStartDate = '';
+            customEndDate = '';
+            overlay.remove();
+            location.reload();
+        };
+
+        overlay.querySelector('#shopify-clear-cancel-btn').onclick = () => overlay.remove();
+    }
+
     let lastDashboardStateHash = '';
 
     function updateDashboard(forceRender = false) {
@@ -2362,7 +2671,11 @@
         const currentHash = `${filteredIds.length}_${totalAllOrders}_${currentFilterMode}_${currentDiscountFilter}_${isSyncingDetails}_${pendingSyncCurrent}_${userStoppedSync}`;
 
         if (!forceRender && currentHash === lastDashboardStateHash && document.getElementById('shopify-top-analytics-panel')) {
-            injectDatesIntoDOM();
+            if (isOrderDetailPage) {
+                injectOrderDetailSummary();
+            } else {
+                injectDatesIntoDOM();
+            }
             if (!userStoppedSync && !isSyncingDetails) {
                 syncMissingOrderDetails();
             }
@@ -2385,7 +2698,7 @@
         let statusBgColor = '#2e7d32'; // verde
 
         if (userStoppedSync) {
-            statusLabel = `🛑 Detenido`;
+            statusLabel = `${SVG_ICONS.stop} Detenido`;
             statusBgColor = '#ea580c'; // naranja / rojo
             isFullySynced = false;
         } else if (isAutoLoadingAll) {
@@ -2393,7 +2706,8 @@
             statusBgColor = '#0288d1'; // azul
             isFullySynced = false;
         } else if (isSyncingDetails && pendingSyncTotal > 0) {
-            statusLabel = `${SVG_ICONS.spin} Detalles (${pendingSyncCurrent} de ${pendingSyncTotal})`;
+            const pct = Math.round((pendingSyncCurrent / pendingSyncTotal) * 100);
+            statusLabel = `${SVG_ICONS.spin} Detalles ${pendingSyncCurrent}/${pendingSyncTotal} (${pct}%)${pendingSyncOrderName ? ' · ' + pendingSyncOrderName : ''}`;
             statusBgColor = '#0288d1'; // azul
             isFullySynced = false;
         } else if (currentFilterMode !== 'all' || currentDiscountFilter !== 'all') {
@@ -2434,8 +2748,12 @@
         const average = orderCount > 0 ? totalSpent / orderCount : 0;
 
         renderPanel(orderCount, formatCurrency(totalSpent), formatCurrency(totalGross), formatCurrency(totalSavings), formatCurrency(average), statusLabel, statusBgColor, false);
-        injectDatesIntoDOM();
-        applyDOMDateFilter(filteredIds);
+        if (isOrderDetailPage) {
+            injectOrderDetailSummary();
+        } else {
+            injectDatesIntoDOM();
+            applyDOMDateFilter(filteredIds);
+        }
         syncMissingOrderDetails();
     }
 
@@ -2464,12 +2782,26 @@
             });
 
             renderPanel(ids.length, formatCurrency(totalSpent), formatCurrency(totalGross), formatCurrency(totalSavings), formatCurrency(totalSpent / ids.length), "Caché Local", null, false);
-            injectDatesIntoDOM();
+            if (isOrderDetailPage) {
+                injectOrderDetailSummary();
+            } else {
+                injectDatesIntoDOM();
+            }
         }
 
-        renderNavFloatingButtons();
+        if (!isOrderDetailPage) {
+            renderNavFloatingButtons();
+        }
         setTimeout(updateDashboard, 1000);
         setTimeout(updateDashboard, 2500);
+
+        if (!isOrderDetailPage && hasInterruptedSync()) {
+            clearSyncProgress();
+            logAnalytics('▶️ Reanudando sincronización de detalles interrumpida...');
+            setTimeout(() => {
+                syncMissingOrderDetails(null, true);
+            }, 1800);
+        }
     });
 
     setInterval(() => {
