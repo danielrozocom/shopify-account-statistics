@@ -161,7 +161,7 @@
             for (let i = 0; i < 8; i++) {
                 const b = getPaginationButton();
                 if (b) return b;
-                await new Promise(resolve => setTimeout(resolve, 600));
+                await new Promise(resolve => setTimeout(resolve, 500));
                 scanDOMOrders();
                 if (withScroll) window.scrollTo({ top: document.body.scrollHeight, behavior: 'auto' });
             }
@@ -169,11 +169,12 @@
         };
 
         while (count < maxAttempts) {
+            if (userStoppedSync || isSyncCancelled) break;
             const loadBtn = await ensureButton();
-            if (!loadBtn) break;
+            if (!loadBtn || userStoppedSync || isSyncCancelled) break;
             loadBtn.click();
             count++;
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise(resolve => setTimeout(resolve, 600));
             scanDOMOrders();
         }
 
@@ -251,10 +252,11 @@
                 }
                 if (code) {
                     if (!discountsMap[code]) {
-                        discountsMap[code] = { code: code, count: 0, totalSaved: 0, type: discountType };
+                        discountsMap[code] = { code: code, count: 0, totalSaved: 0, type: discountType, orders: [] };
                     }
                     discountsMap[code].count += 1;
                     discountsMap[code].totalSaved += (order.discountAmount || 0);
+                    discountsMap[code].orders.push({ name: key, gid: order.gid || null });
                 }
             }
         }
@@ -267,10 +269,11 @@
             const order = ordersMap[key];
             const method = cleanPaymentMethodLabel(order.paymentMethod) || 'No especificado / Estándar';
             if (!paymentsMap[method]) {
-                paymentsMap[method] = { method: method, count: 0, totalSpent: 0 };
+                paymentsMap[method] = { method: method, count: 0, totalSpent: 0, orders: [] };
             }
             paymentsMap[method].count += 1;
             paymentsMap[method].totalSpent += (order.price || 0);
+            paymentsMap[method].orders.push({ name: key, gid: order.gid || null });
         }
         return Object.values(paymentsMap).sort((a, b) => b.totalSpent - a.totalSpent);
     }
@@ -515,10 +518,21 @@
                 } else if (d.type === 'automatic') {
                     typeBadgeHtml = `<span style="background: #dbeafe; color: #1d4ed8; border: 1px solid #bfdbfe; padding: 2px 8px; border-radius: 999px; font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap;">${SVG_ICONS.tagInline} Automático</span>`;
                 }
+
+                const dOrdersLinks = (Array.isArray(d.orders) && d.orders.length > 0)
+                    ? d.orders.map(o => {
+                        const url = getOrderUrl(o.gid);
+                        return url ? `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color:#b45309; text-decoration:underline; font-weight:600; padding:1px 5px; background:#fff8e1; border-radius:4px; border:1px solid #fef3c7;">${o.name}</a>` : `<span style="color:#b45309; font-weight:600;">${o.name}</span>`;
+                    }).join(' ')
+                    : '';
+
                 discountRowsHtml += `
                     <tr style="border-bottom: 1px solid #f0ecf4;">
-                        <td style="padding: 12px 14px; font-weight: 700; color: #b45309; font-size: 13px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-                            ${SVG_ICONS.tagInline} ${d.code} ${typeBadgeHtml}
+                        <td style="padding: 12px 14px; font-weight: 700; color: #b45309; font-size: 13px;">
+                            <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                                ${SVG_ICONS.tagInline} ${d.code} ${typeBadgeHtml}
+                            </div>
+                            ${dOrdersLinks ? `<div style="margin-top: 4px; font-size: 11px; color: #70647a; font-weight: 400; display: flex; align-items: center; gap: 4px; flex-wrap: wrap;"><span>Pedidos:</span> ${dOrdersLinks}</div>` : ''}
                         </td>
                         <td style="padding: 12px 14px; text-align: center; font-weight: 600; font-size: 13px; color: #16081e;">${d.count} ${d.count === 1 ? 'pedido' : 'pedidos'}</td>
                         <td style="padding: 12px 14px; text-align: right; font-weight: 700; color: #2e7d32; font-size: 13px;">${formatCurrency(d.totalSaved)} ahorrado</td>
@@ -532,10 +546,20 @@
             paymentRowsHtml = `<tr><td colspan="3" style="padding: 20px; text-align: center; color: #70647a;">Sin datos de medios de pago.</td></tr>`;
         } else {
             paymentBreakdown.forEach((pm) => {
+                const pmOrdersLinks = (Array.isArray(pm.orders) && pm.orders.length > 0)
+                    ? pm.orders.map(o => {
+                        const url = getOrderUrl(o.gid);
+                        return url ? `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color:#1d4ed8; text-decoration:underline; font-weight:600; padding:1px 5px; background:#eff6ff; border-radius:4px; border:1px solid #dbeafe;">${o.name}</a>` : `<span style="color:#1d4ed8; font-weight:600;">${o.name}</span>`;
+                    }).join(' ')
+                    : '';
+
                 paymentRowsHtml += `
                     <tr style="border-bottom: 1px solid #f0ecf4;">
-                        <td style="padding: 12px 14px; font-weight: 600; color: #1d4ed8; font-size: 13px; display: flex; align-items: center; gap: 6px;">
-                            ${SVG_ICONS.card} ${pm.method}
+                        <td style="padding: 12px 14px; font-weight: 600; color: #1d4ed8; font-size: 13px;">
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                ${SVG_ICONS.card} ${pm.method}
+                            </div>
+                            ${pmOrdersLinks ? `<div style="margin-top: 4px; font-size: 11px; color: #70647a; font-weight: 400; display: flex; align-items: center; gap: 4px; flex-wrap: wrap;"><span>Pedidos:</span> ${pmOrdersLinks}</div>` : ''}
                         </td>
                         <td style="padding: 12px 14px; text-align: center; font-weight: 600; font-size: 13px; color: #16081e;">${pm.count} ${pm.count === 1 ? 'pedido' : 'pedidos'}</td>
                         <td style="padding: 12px 14px; text-align: right; font-weight: 700; color: #16081e; font-size: 13px;">${formatCurrency(pm.totalSpent)}</td>
@@ -759,7 +783,7 @@
 
             panel.innerHTML = `
                 <div style="display: flex; flex-direction: column; gap: 12px; width: 100%;">
-                    <div style="display: flex; gap: 18px; flex-wrap: wrap; align-items: center; width: 100%;">
+                    <div style="display: flex; gap: 14px; flex-wrap: wrap; align-items: center; justify-content: center; width: 100%;">
                         <div style="min-width: 90px; background: #f3e8ff; border: 1px solid #e9d5ff; border-radius: 10px; padding: 6px 10px;">
                             <span style="font-size: 11px; color: #7c3aed; display: flex; align-items: center; gap: 4px; font-weight: 700; text-transform: uppercase;">
                                 ${SVG_ICONS.boxes} Órdenes
@@ -804,36 +828,41 @@
                         </div>
                     </div>
                     
-                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; width: 100%;">
+                    <div style="display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; width: 100%;">
                         <span id="shopify-stat-badge" style="font-size: 11px; background: ${badgeColor}; color: #fff; padding: 5px 10px; border-radius: 6px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
                             ${statusText}
                         </span>
-                        ${statusText.includes('parcial') && !isAutoLoadingAll ? `
+                        ${(getPaginationButton() || hasMorePagesDetected) && !isAutoLoadingAll ? `
                             <button id="shopify-btn-load-all" style="padding: 5px 10px; border-radius: 6px; border: 1px solid ${themeColor}; background: #ffffff; color: #16081e; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
                                 ${SVG_ICONS.cloudDown} Cargar todos
                             </button>
                         ` : ''}
-                        ${!statusText.includes('parcial') && !isAutoLoadingAll ? `
-                            <button id="shopify-btn-force-refresh" style="padding: 5px 10px; border-radius: 6px; border: 1px solid ${themeColor}; background: ${themeColor}; color: #ffffff; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 5px; box-shadow: 0 2px 6px rgba(147, 51, 234, 0.25); ${isSyncingDetails ? 'animation: shopifyPulse 1.2s ease-in-out infinite;' : ''}">
-                                ${isSyncingDetails ? SVG_ICONS.spin : SVG_ICONS.refresh} ${isSyncingDetails ? 'Sincronizando...' : 'Actualizar'}
-                            </button>
-                            ${isSyncingDetails ? `
-                                <button id="shopify-btn-stop-sync" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #d32f2f; background: #fff0f0; color: #d32f2f; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
-                                    ${SVG_ICONS.trash} Detener
-                                </button>
-                            ` : ''}
-                            <button id="shopify-btn-open-modal" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #9333ea; background: #ffffff; color: #9333ea; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 5px;">
-                                ${SVG_ICONS.trophy} Ver Reporte Completo
-                            </button>
-                            <button id="shopify-btn-clear-storage" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #d32f2f; background: #ffffff; color: #d32f2f; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
-                                ${SVG_ICONS.trash} Borrar memoria
+                        ${userStoppedSync ? `
+                            <button id="shopify-btn-resume-sync" style="padding: 5px 10px; border-radius: 6px; border: 1px solid ${themeColor}; background: ${themeColor}; color: #ffffff; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 5px; box-shadow: 0 2px 6px rgba(147, 51, 234, 0.25);">
+                                ${SVG_ICONS.refresh} Reanudar
                             </button>
                         ` : ''}
+                        ${!isSyncingDetails && !isAutoLoadingAll && !userStoppedSync ? `
+                            <button id="shopify-btn-force-refresh" style="padding: 5px 10px; border-radius: 6px; border: 1px solid ${themeColor}; background: ${themeColor}; color: #ffffff; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 5px; box-shadow: 0 2px 6px rgba(147, 51, 234, 0.25);">
+                                ${SVG_ICONS.refresh} Actualizar
+                            </button>
+                        ` : ''}
+                        ${(isSyncingDetails || isAutoLoadingAll) && !userStoppedSync ? `
+                            <button id="shopify-btn-stop-sync" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #d32f2f; background: #fff0f0; color: #d32f2f; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                                ${SVG_ICONS.trash} Detener
+                            </button>
+                        ` : ''}
+                        <button id="shopify-btn-open-modal" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #9333ea; background: #ffffff; color: #9333ea; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                            ${SVG_ICONS.trophy} Ver Reporte Completo
+                        </button>
+                        <button id="shopify-btn-clear-storage" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #d32f2f; background: #ffffff; color: #d32f2f; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                            ${SVG_ICONS.trash} Borrar memoria
+                        </button>
                     </div>
                 </div>
 
                 <!-- Controles de Filtros de Fecha, Descuento y Navegación Rápida -->
-                <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center; justify-content: space-between; border-top: 1px solid #f0ecf4; padding-top: 12px;">
+                <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center; justify-content: center; border-top: 1px solid #f0ecf4; padding-top: 12px;">
                     <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
                         <div style="display: flex; gap: 6px; align-items: center;">
                             <span style="font-size: 12px; font-weight: 600; color: #4a3e56; display: flex; align-items: center; gap: 4px;">
@@ -934,6 +963,16 @@
                 };
             }
 
+            const btnResumeSync = document.getElementById('shopify-btn-resume-sync');
+            if (btnResumeSync) {
+                btnResumeSync.onclick = () => {
+                    userStoppedSync = false;
+                    isSyncCancelled = false;
+                    updateDashboard(true);
+                    syncMissingOrderDetails(null, true);
+                };
+            }
+
             const btnStopSync = document.getElementById('shopify-btn-stop-sync');
             if (btnStopSync) {
                 btnStopSync.onclick = () => {
@@ -943,6 +982,8 @@
                     isAutoLoadingAll = false;
                     pendingSyncTotal = 0;
                     pendingSyncCurrent = 0;
+                    pendingSyncOrderName = '';
+                    lastDashboardStateHash = '';
                     clearSyncProgress();
                     updateDashboard(true);
                     logAnalytics('🛑 Sincronización detenida por el usuario.');
@@ -977,33 +1018,6 @@
             if (btnClearStorage) {
                 btnClearStorage.onclick = () => askClearStorage();
             }
-        } else {
-            const countEl = panel.querySelector('#shopify-stat-count');
-            if (countEl) countEl.textContent = count;
-
-            const totalEl = panel.querySelector('#shopify-stat-total');
-            if (totalEl) totalEl.textContent = totalSpentFormatted;
-
-            const grossEl = panel.querySelector('#shopify-stat-gross');
-            if (grossEl) grossEl.textContent = totalGrossFormatted;
-
-            const savingsEl = panel.querySelector('#shopify-stat-savings');
-            if (savingsEl) savingsEl.textContent = totalSavingsFormatted;
-
-            const avgEl = panel.querySelector('#shopify-stat-avg');
-            if (avgEl) avgEl.textContent = avgFormatted;
-
-            const badgeEl = panel.querySelector('#shopify-stat-badge');
-            if (badgeEl) {
-                badgeEl.innerHTML = statusText;
-                badgeEl.style.backgroundColor = badgeColor;
-            }
-
-            const topProdTitleEl = panel.querySelector('#shopify-stat-topprod-title');
-            if (topProdTitleEl) topProdTitleEl.textContent = topProductTitle;
-
-            const topProdSubEl = panel.querySelector('#shopify-stat-topprod-sub');
-            if (topProdSubEl) topProdSubEl.textContent = topProductSub;
         }
         return true;
     }
@@ -1362,10 +1376,10 @@
                     // Agrupar por ID de producto (handle de la URL) para que el mismo producto
                     // con distintas variaciones NO se cuente por separado.
                     const itemTitle = it.title ? String(it.title).trim() : '';
-                    let groupKey = itemTitle;
+                    let groupKey = slugifyTitle(itemTitle) || itemTitle.toLowerCase();
                     if (it.url) {
                         const handleMatch = String(it.url).match(/\/products\/([^/?#]+)/);
-                        if (handleMatch && handleMatch[1]) groupKey = handleMatch[1];
+                        if (handleMatch && handleMatch[1]) groupKey = handleMatch[1].toLowerCase();
                     }
                     if (!map[groupKey]) {
                         map[groupKey] = {
@@ -1522,7 +1536,10 @@
             };
         });
 
-        return result.sort((a, b) => b.quantity - a.quantity);
+        return result.sort((a, b) => {
+            if (b.quantity !== a.quantity) return b.quantity - a.quantity;
+            return b.totalSpent - a.totalSpent;
+        });
     }
 
     function cleanPaymentMethodLabel(value) {
@@ -1614,6 +1631,34 @@
         return null;
     }
 
+    function findDeepNote(obj) {
+        if (!obj || typeof obj !== 'object') return null;
+        if (obj.note && typeof obj.note === 'string' && obj.note.trim()) return obj.note.trim();
+        if (obj.customerNote && typeof obj.customerNote === 'string' && obj.customerNote.trim()) return obj.customerNote.trim();
+        if (Array.isArray(obj.customAttributes) && obj.customAttributes.length > 0) {
+            const attrStr = obj.customAttributes.map(a => `${a.key}: ${a.value}`).join(' | ');
+            if (attrStr.trim()) return attrStr.trim();
+        }
+        if (Array.isArray(obj.custom_attributes) && obj.custom_attributes.length > 0) {
+            const attrStr = obj.custom_attributes.map(a => `${a.key || a.name}: ${a.value}`).join(' | ');
+            if (attrStr.trim()) return attrStr.trim();
+        }
+        if (Array.isArray(obj)) {
+            for (const item of obj) {
+                const res = findDeepNote(item);
+                if (res) return res;
+            }
+        } else {
+            for (const k in obj) {
+                if (typeof obj[k] === 'object') {
+                    const res = findDeepNote(obj[k]);
+                    if (res) return res;
+                }
+            }
+        }
+        return null;
+    }
+
     function extractOrdersFromObj(obj, uniqueOrders, isDetailResponse = false) {
         if (!obj || typeof obj !== 'object') return false;
         let updated = false;
@@ -1657,10 +1702,7 @@
             const extractedItems = extractLineItemsFromObj(obj);
             const combinedItems = (extractedItems.length > 0) ? extractedItems : (existing.items || null);
 
-            let extractedNote = obj.note || obj.customerNote || null;
-            if (!extractedNote && Array.isArray(obj.customAttributes) && obj.customAttributes.length > 0) {
-                extractedNote = obj.customAttributes.map(a => `${a.key}: ${a.value}`).join(' | ');
-            }
+            const extractedNote = findDeepNote(obj);
             const note = extractedNote || existing.note || null;
             const extractedPaymentMethod = extractPaymentMethodFromObj(obj);
             const paymentMethod = isDetailResponse
@@ -1753,6 +1795,16 @@
     note
     customAttributes { key value }
     currentTotalPrice: totalPrice { amount currencyCode }
+    totalPriceBeforeDiscounts { amount currencyCode }
+    totalSavings { amount currencyCode }
+    discountApplications(first: 10) {
+      nodes {
+        targetType
+        ... on AutomaticDiscountApplication { title }
+        ... on DiscountCodeApplication { code }
+        ... on ManualDiscountApplication { title }
+      }
+    }
     ${TRANSACTIONS_FRAGMENT}
   }
 }`;
@@ -1761,6 +1813,8 @@
   order(id: $orderId) {
     id
     name
+    note
+    customAttributes { key value }
     ${TRANSACTIONS_FRAGMENT}
     lineItems: lineItemContainers {
       ... on RemainingLineItemContainer {
@@ -1799,7 +1853,8 @@
 
     async function syncMissingOrderDetails(forceKey = null, forceRun = false) {
         if (isSyncingDetails || userStoppedSync || isAutoLoadingAll) return;
-        if (!forceRun && !isOrderDetailPage && (getPaginationButton() || hasMorePagesDetected)) return;
+        // BLOQUEO STRICTO: En la lista de órdenes, JAMÁS pedir detalles mientras falten páginas por cargar al DOM
+        if (!isOrderDetailPage && (getPaginationButton() || hasMorePagesDetected)) return;
         const ordersMap = getStoredOrders();
         const orderKeys = Object.keys(ordersMap);
 
@@ -1829,9 +1884,14 @@
         pendingList.sort((a, b) => {
             const da = parseSpanishDate(ordersMap[a.name]?.date);
             const db = parseSpanishDate(ordersMap[b.name]?.date);
-            if (da && db) return db - da;
-            if (da) return -1;
-            if (db) return 1;
+            if (da && db && da.getTime() !== db.getTime()) return db.getTime() - da.getTime();
+            if (da && !db) return -1;
+            if (!da && db) return 1;
+
+            const gida = parseInt(String(a.gid || '').replace(/\D/g, ''), 10) || 0;
+            const gidb = parseInt(String(b.gid || '').replace(/\D/g, ''), 10) || 0;
+            if (gida !== gidb) return gidb - gida;
+
             const na = parseInt(String(a.name).replace(/\D/g, ''), 10) || 0;
             const nb = parseInt(String(b.name).replace(/\D/g, ''), 10) || 0;
             return nb - na;
@@ -1877,40 +1937,40 @@
 
                 // Estrategia 1 (PRIMARIA): GraphQL OrderDetails POST — query completa (nota, transacciones, descuentos, ítems, variantes)
                 try {
-                        const resp = await targetWindow.fetch(graphqlUrl + '?operation=OrderDetails', {
-                            method: 'POST',
-                            credentials: 'include',
-                            headers: defaultReqHeaders,
-                            body: JSON.stringify({
-                                operationName: 'OrderDetails',
-                                variables: {
-                                    orderId: item.gid
-                                },
-                                query: ORDER_DETAILS_QUERY
-                            })
-                        });
+                    const resp = await targetWindow.fetch(graphqlUrl + '?operation=OrderDetails', {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: defaultReqHeaders,
+                        body: JSON.stringify({
+                            operationName: 'OrderDetails',
+                            variables: {
+                                orderId: item.gid
+                            },
+                            query: ORDER_DETAILS_QUERY
+                        })
+                    });
 
-                        if (resp.status === 429) {
-                            await new Promise(r => setTimeout(r, 1500));
-                        } else if (resp.ok) {
-                            const resJson = await parseResponseSafely(resp);
-                            if (resJson) {
-                                if (resJson?.data?.order && !resJson.data.order.name) {
-                                    resJson.data.order.name = item.name;
+                    if (resp.status === 429) {
+                        await new Promise(r => setTimeout(r, 1500));
+                    } else if (resp.ok) {
+                        const resJson = await parseResponseSafely(resp);
+                        if (resJson) {
+                            if (resJson?.data?.order && !resJson.data.order.name) {
+                                resJson.data.order.name = item.name;
+                            }
+                            let currentOrders = getStoredOrders();
+                            if (extractOrdersFromObj(resJson, currentOrders, true)) {
+                                if (currentOrders[item.name]) {
+                                    currentOrders[item.name].detailFetched = true;
+                                    if (currentOrders[item.name].paymentMethod) paymentFound = true;
                                 }
-                                let currentOrders = getStoredOrders();
-                                if (extractOrdersFromObj(resJson, currentOrders, true)) {
-                                    if (currentOrders[item.name]) {
-                                        currentOrders[item.name].detailFetched = true;
-                                        if (currentOrders[item.name].paymentMethod) paymentFound = true;
-                                    }
-                                    saveStoredOrders(currentOrders);
-                                    fetchedSuccess = true;
-                                    logAnalytics('✅ [GraphQL OrderDetails] Sincronización exitosa para:', item.name);
-                                }
+                                saveStoredOrders(currentOrders);
+                                fetchedSuccess = true;
+                                logAnalytics('✅ [GraphQL OrderDetails] Sincronización exitosa para:', item.name);
                             }
                         }
-                    } catch (e1) { }
+                    }
+                } catch (e1) { }
 
                 // Estrategia 2 (SECUNDARIA): Remix Data Loader GET Route — se corre también si el pago no se encontró en la Estrategia 1
                 if (!fetchedSuccess || !paymentFound) {
@@ -2012,7 +2072,9 @@
 
                 saveSyncProgress();
                 updateDashboard();
+                if (isSyncCancelled || userStoppedSync) break;
                 await new Promise(r => setTimeout(r, 450));
+                if (isSyncCancelled || userStoppedSync) break;
             }
         } finally {
             isSyncingDetails = false;
@@ -2020,6 +2082,9 @@
             pendingSyncCurrent = 0;
             pendingSyncOrderName = '';
             clearSyncProgress();
+            if (userStoppedSync) {
+                lastDashboardStateHash = '';
+            }
         }
     }
 
@@ -2222,81 +2287,92 @@
                     }
                 }
 
-                // Contenedor interno de la tarjeta para NO desbordar horizontalmente como columna de article
-                const cardInnerContainer = subSpan?.parentElement || article.querySelector('h2')?.parentElement || article.firstElementChild || article;
+                // Contenedor interno para notas y medio de pago colocado justo debajo del texto de resumen de la orden (subSpan)
+                const targetCardBox = subSpan ? subSpan.parentElement : (article.querySelector('h2')?.parentElement || article.firstElementChild || article);
 
-                let extraBadgesContainer = cardInnerContainer.querySelector('.shopify-order-extra-badges');
+                let extraBadgesContainer = article.querySelector('.shopify-order-extra-badges');
                 if ((orderInfo.note || orderInfo.paymentMethod) && !extraBadgesContainer) {
                     extraBadgesContainer = document.createElement('div');
                     extraBadgesContainer.className = 'shopify-order-extra-badges';
                     extraBadgesContainer.style.cssText = `
                         margin-top: 6px;
+                        margin-bottom: 4px;
                         display: flex;
                         flex-wrap: wrap;
                         gap: 6px;
                         align-items: center;
                         width: 100%;
                     `;
-                    cardInnerContainer.appendChild(extraBadgesContainer);
+                    targetCardBox.appendChild(extraBadgesContainer);
                 }
 
-                // Inyección de la etiqueta de nota de pedido si existe
-                if (orderInfo.note && extraBadgesContainer) {
+                // Inyección o limpieza de la etiqueta de nota de pedido
+                if (extraBadgesContainer) {
                     let existingNoteBadge = extraBadgesContainer.querySelector('.shopify-order-note-badge');
-                    if (existingNoteBadge) {
-                        if (existingNoteBadge.getAttribute('data-note') !== orderInfo.note) {
-                            existingNoteBadge.setAttribute('data-note', orderInfo.note);
-                            existingNoteBadge.innerHTML = `${SVG_ICONS.note} <strong>Nota:</strong> ${orderInfo.note}`;
+                    if (orderInfo.note) {
+                        if (existingNoteBadge) {
+                            if (existingNoteBadge.getAttribute('data-note') !== orderInfo.note) {
+                                existingNoteBadge.setAttribute('data-note', orderInfo.note);
+                                existingNoteBadge.innerHTML = `${SVG_ICONS.note} <strong>Nota:</strong> ${orderInfo.note}`;
+                            }
+                        } else {
+                            const noteBadge = document.createElement('div');
+                            noteBadge.className = 'shopify-order-note-badge';
+                            noteBadge.setAttribute('data-note', orderInfo.note);
+                            noteBadge.style.cssText = `
+                                font-size: 11px;
+                                background: #fff8e1;
+                                color: #b45309;
+                                padding: 3px 8px;
+                                border-radius: 6px;
+                                font-weight: 500;
+                                display: inline-flex;
+                                align-items: center;
+                                gap: 4px;
+                                border: 1px solid #fef3c7;
+                                width: fit-content;
+                            `;
+                            noteBadge.innerHTML = `${SVG_ICONS.note} <strong>Nota:</strong> ${orderInfo.note}`;
+                            extraBadgesContainer.appendChild(noteBadge);
                         }
-                    } else {
-                        const noteBadge = document.createElement('div');
-                        noteBadge.className = 'shopify-order-note-badge';
-                        noteBadge.setAttribute('data-note', orderInfo.note);
-                        noteBadge.style.cssText = `
-                            font-size: 11px;
-                            background: #fff8e1;
-                            color: #b45309;
-                            padding: 3px 8px;
-                            border-radius: 6px;
-                            font-weight: 500;
-                            display: inline-flex;
-                            align-items: center;
-                            gap: 4px;
-                            border: 1px solid #fef3c7;
-                            width: fit-content;
-                        `;
-                        noteBadge.innerHTML = `${SVG_ICONS.note} <strong>Nota:</strong> ${orderInfo.note}`;
-                        extraBadgesContainer.appendChild(noteBadge);
+                    } else if (existingNoteBadge) {
+                        existingNoteBadge.remove();
                     }
-                }
 
-                // Inyección de la etiqueta de medio de pago si existe
-                if (orderInfo.paymentMethod && extraBadgesContainer) {
+                    // Inyección o limpieza de la etiqueta de medio de pago
                     let existingPaymentBadge = extraBadgesContainer.querySelector('.shopify-order-payment-badge');
-                    if (existingPaymentBadge) {
-                        if (existingPaymentBadge.getAttribute('data-payment') !== orderInfo.paymentMethod) {
-                            existingPaymentBadge.setAttribute('data-payment', orderInfo.paymentMethod);
-                            existingPaymentBadge.innerHTML = `${SVG_ICONS.card} <strong>Pago:</strong> ${orderInfo.paymentMethod}`;
+                    if (orderInfo.paymentMethod) {
+                        if (existingPaymentBadge) {
+                            if (existingPaymentBadge.getAttribute('data-payment') !== orderInfo.paymentMethod) {
+                                existingPaymentBadge.setAttribute('data-payment', orderInfo.paymentMethod);
+                                existingPaymentBadge.innerHTML = `${SVG_ICONS.card} <strong>Pago:</strong> ${orderInfo.paymentMethod}`;
+                            }
+                        } else {
+                            const paymentBadge = document.createElement('div');
+                            paymentBadge.className = 'shopify-order-payment-badge';
+                            paymentBadge.setAttribute('data-payment', orderInfo.paymentMethod);
+                            paymentBadge.style.cssText = `
+                                font-size: 11px;
+                                background: #eff6ff;
+                                color: #1d4ed8;
+                                padding: 3px 8px;
+                                border-radius: 6px;
+                                font-weight: 500;
+                                display: inline-flex;
+                                align-items: center;
+                                gap: 4px;
+                                border: 1px solid #dbeafe;
+                                width: fit-content;
+                            `;
+                            paymentBadge.innerHTML = `${SVG_ICONS.card} <strong>Pago:</strong> ${orderInfo.paymentMethod}`;
+                            extraBadgesContainer.appendChild(paymentBadge);
                         }
-                    } else {
-                        const paymentBadge = document.createElement('div');
-                        paymentBadge.className = 'shopify-order-payment-badge';
-                        paymentBadge.setAttribute('data-payment', orderInfo.paymentMethod);
-                        paymentBadge.style.cssText = `
-                            font-size: 11px;
-                            background: #eff6ff;
-                            color: #1d4ed8;
-                            padding: 3px 8px;
-                            border-radius: 6px;
-                            font-weight: 500;
-                            display: inline-flex;
-                            align-items: center;
-                            gap: 4px;
-                            border: 1px solid #dbeafe;
-                            width: fit-content;
-                        `;
-                        paymentBadge.innerHTML = `${SVG_ICONS.card} <strong>Pago:</strong> ${orderInfo.paymentMethod}`;
-                        extraBadgesContainer.appendChild(paymentBadge);
+                    } else if (existingPaymentBadge) {
+                        existingPaymentBadge.remove();
+                    }
+
+                    if (extraBadgesContainer.children.length === 0) {
+                        extraBadgesContainer.remove();
                     }
                 }
             }
@@ -2618,6 +2694,11 @@
                 if (currentOrders[k]) {
                     delete currentOrders[k].paymentMethod;
                     delete currentOrders[k].note;
+                    delete currentOrders[k].items;
+                    delete currentOrders[k].discountCode;
+                    delete currentOrders[k].discountType;
+                    delete currentOrders[k].priceBeforeDiscounts;
+                    currentOrders[k].discountAmount = 0;
                     currentOrders[k].detailFetched = false;
                     currentOrders[k].verifiedNoDiscount = false;
                     currentOrders[k].syncAttempts = 0;
@@ -2630,7 +2711,7 @@
             isSyncCancelled = false;
             updateDashboard(true);
             loadAllOrders();
-            logAnalytics('🧹 Detalles borrados. Re-sincronizando del más nuevo al más viejo...');
+            logAnalytics('🧹 Todos los detalles (cupones, productos, notas, pago) borrados. Re-sincronizando...');
         };
 
         overlay.querySelector('#shopify-clear-all-btn').onclick = () => {
@@ -2668,7 +2749,7 @@
         const totalAllOrders = Object.keys(ordersMap).length;
         const filteredIds = filterOrders(ordersMap);
 
-        const currentHash = `${filteredIds.length}_${totalAllOrders}_${currentFilterMode}_${currentDiscountFilter}_${isSyncingDetails}_${pendingSyncCurrent}_${userStoppedSync}`;
+        const currentHash = `${filteredIds.length}_${totalAllOrders}_${currentFilterMode}_${currentDiscountFilter}_${isSyncingDetails}_${pendingSyncCurrent}_${userStoppedSync}_${isAutoLoadingAll}`;
 
         if (!forceRender && currentHash === lastDashboardStateHash && document.getElementById('shopify-top-analytics-panel')) {
             if (isOrderDetailPage) {
@@ -2694,6 +2775,8 @@
         const isNewestInCache = newestDomOrderId && ordersMap[newestDomOrderId];
         const pagBtn = getPaginationButton();
 
+        const pendingDetailCount = Object.values(ordersMap).filter(o => !(o.detailFetched || o.verifiedNoDiscount) || !o.paymentMethod).length;
+
         let statusLabel = `${SVG_ICONS.check} Sincronizado`;
         let statusBgColor = '#2e7d32'; // verde
 
@@ -2705,20 +2788,21 @@
             statusLabel = `${SVG_ICONS.spin} Sincronizando...`;
             statusBgColor = '#0288d1'; // azul
             isFullySynced = false;
-        } else if (isSyncingDetails && pendingSyncTotal > 0) {
-            const pct = Math.round((pendingSyncCurrent / pendingSyncTotal) * 100);
-            statusLabel = `${SVG_ICONS.spin} Detalles ${pendingSyncCurrent}/${pendingSyncTotal} (${pct}%)${pendingSyncOrderName ? ' · ' + pendingSyncOrderName : ''}`;
+        } else if (isSyncingDetails && totalAllOrders > 0) {
+            const syncedCount = Object.values(ordersMap).filter(o => o.detailFetched || o.verifiedNoDiscount).length;
+            const pct = Math.round((syncedCount / totalAllOrders) * 100);
+            statusLabel = `${SVG_ICONS.spin} Detalles ${syncedCount}/${totalAllOrders} (${pct}%)${pendingSyncOrderName ? ' · ' + pendingSyncOrderName : ''}`;
             statusBgColor = '#0288d1'; // azul
             isFullySynced = false;
         } else if (currentFilterMode !== 'all' || currentDiscountFilter !== 'all') {
             statusLabel = `${SVG_ICONS.search} Filtrando (${filteredIds.length} de ${totalAllOrders})`;
             statusBgColor = '#7b1fa2'; // morado
-            isFullySynced = isNewestInCache;
+            isFullySynced = isNewestInCache && !pagBtn && pendingDetailCount === 0;
         } else if (totalAllOrders === 0) {
             statusLabel = `${SVG_ICONS.spin} Sincronizando...`;
             statusBgColor = '#0288d1';
             isFullySynced = false;
-        } else if (!isNewestInCache && pagBtn) {
+        } else if (pagBtn || pendingDetailCount > 0) {
             statusLabel = `${SVG_ICONS.alert} Sincronización parcial`;
             statusBgColor = '#e65100';
             isFullySynced = false;
@@ -2753,6 +2837,10 @@
         } else {
             injectDatesIntoDOM();
             applyDOMDateFilter(filteredIds);
+        }
+        if (!isOrderDetailPage && getPaginationButton() && !isAutoLoadingAll && !userStoppedSync) {
+            loadAllOrders();
+            return;
         }
         syncMissingOrderDetails();
     }
@@ -2791,17 +2879,31 @@
 
         if (!isOrderDetailPage) {
             renderNavFloatingButtons();
-        }
-        setTimeout(updateDashboard, 1000);
-        setTimeout(updateDashboard, 2500);
+            // Disparar carga automática inmediata y reintentar si el DOM de Shopify aún no ha montado el botón
+            const startAutoLoad = () => {
+                const pagBtn = getPaginationButton();
+                if (pagBtn || hasMorePagesDetected) {
+                    loadAllOrders();
+                    return true;
+                }
+                return false;
+            };
 
-        if (!isOrderDetailPage && hasInterruptedSync()) {
-            clearSyncProgress();
-            logAnalytics('▶️ Reanudando sincronización de detalles interrumpida...');
-            setTimeout(() => {
-                syncMissingOrderDetails(null, true);
-            }, 1800);
+            if (!startAutoLoad()) {
+                let attempts = 0;
+                const autoLoadInterval = setInterval(() => {
+                    attempts++;
+                    if (startAutoLoad() || attempts > 15) {
+                        clearInterval(autoLoadInterval);
+                        if (attempts > 15 && hasInterruptedSync()) {
+                            clearSyncProgress();
+                            syncMissingOrderDetails(null, true);
+                        }
+                    }
+                }, 400);
+            }
         }
+        setTimeout(updateDashboard, 500);
     });
 
     setInterval(() => {
