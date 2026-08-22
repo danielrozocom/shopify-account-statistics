@@ -6,6 +6,7 @@
 // @author       Daniel Josue Rozo Vargas
 // @match        https://shopify.com/*/account/orders*
 // @grant        none
+// @icon         https://cdn.shopify.com/static/shopify-favicon.png
 // ==/UserScript==
 
 (function () {
@@ -142,6 +143,10 @@
     function getPaginationButton() {
         const candidates = document.querySelectorAll('button, a');
         for (const btn of candidates) {
+            // Ignorar botones o enlaces deshabilitados
+            if (btn.disabled || btn.getAttribute('disabled') !== null || btn.getAttribute('aria-disabled') === 'true' || btn.classList.contains('disabled')) {
+                continue;
+            }
             const text = (btn.textContent || '').toLowerCase().trim();
             if (text.includes('cargar más') || text.includes('ver más') || text.includes('mostrar más') || text.includes('show more') || text.includes('load more') || text.includes('siguiente')) {
                 return btn;
@@ -154,7 +159,7 @@
         return null;
     }
 
-    async function loadAllOrders(withScroll = false) {
+    async function loadAllOrders(withScroll = false, forceAll = false) {
         if (isAutoLoadingAll) return;
         isAutoLoadingAll = true;
         updateDashboard();
@@ -174,19 +179,42 @@
             return null;
         };
 
-        while (count < maxAttempts) {
-            if (userStoppedSync || isSyncCancelled) break;
-            const loadBtn = await ensureButton();
-            if (!loadBtn || userStoppedSync || isSyncCancelled) break;
-            loadBtn.click();
-            count++;
-            await new Promise(resolve => setTimeout(resolve, 600));
-            scanDOMOrders();
-        }
+        try {
+            while (count < maxAttempts) {
+                if (userStoppedSync || isSyncCancelled) break;
 
-        isAutoLoadingAll = false;
-        hasMorePagesDetected = false;
-        updateDashboard();
+                // Si no se fuerza la carga completa y ya detectamos órdenes cacheadas en el DOM, nos detenemos.
+                if (!forceAll) {
+                    const articles = document.querySelectorAll('article');
+                    let foundCached = false;
+                    const cachedOrders = getStoredOrders();
+                    for (const article of articles) {
+                        const orderId = extractOrderIdFromArticle(article);
+                        if (orderId && cachedOrders[orderId]) {
+                            foundCached = true;
+                            break;
+                        }
+                    }
+                    if (foundCached && articles.length > 0) {
+                        logAnalytics('🛑 Deteniendo carga automática: se encontraron pedidos que ya están en caché.');
+                        break;
+                    }
+                }
+
+                const loadBtn = await ensureButton();
+                if (!loadBtn || userStoppedSync || isSyncCancelled) break;
+                loadBtn.click();
+                count++;
+                await new Promise(resolve => setTimeout(resolve, 600));
+                scanDOMOrders();
+            }
+        } catch (err) {
+            logAnalytics('Error en loadAllOrders:', err);
+        } finally {
+            isAutoLoadingAll = false;
+            hasMorePagesDetected = false;
+            updateDashboard();
+        }
         await syncMissingOrderDetails(null, true);
     }
 
@@ -201,7 +229,7 @@
         } else if (position === 'last') {
             const pagBtn = getPaginationButton();
             if (pagBtn) {
-                await loadAllOrders(true);
+                await loadAllOrders(true, true);
             }
 
             const articles = document.querySelectorAll('article');
@@ -1054,7 +1082,7 @@
                 btnLoadAll.onclick = () => {
                     userStoppedSync = false;
                     isSyncCancelled = false;
-                    loadAllOrders();
+                    loadAllOrders(false, true);
                 };
             }
 
@@ -1104,7 +1132,7 @@
                     saveStoredOrders(currentOrders);
                     updateDashboard(true);
 
-                    await loadAllOrders();
+                    await loadAllOrders(false, true);
                     updateDashboard(true);
                 };
             }
@@ -1556,10 +1584,10 @@
             p.history.sort((a, b) => {
                 const da = parseSpanishDate(a.date);
                 const db = parseSpanishDate(b.date);
-                return (da && db) ? da - db : 0;
+                return (da && db) ? db - da : 0;
             });
 
-            // Agrupar histórico secuencialmente por fecha cronológica (del más antiguo al más reciente).
+            // Agrupar histórico secuencialmente por fecha cronológica (del más reciente al más antiguo).
             // Solo agrupar si son compras CONSECUTIVAS al mismo precio y descuento para no mezclar periodos temporales distintos.
             const groupedHistory = [];
             p.history.forEach(h => {
@@ -1810,7 +1838,8 @@
                 verifiedNoDiscount: isDetailResponse ? true : (existing.verifiedNoDiscount || false),
                 items: combinedItems,
                 note: note,
-                paymentMethod: paymentMethod
+                paymentMethod: paymentMethod,
+                syncAttempts: existing.syncAttempts || 0
             };
             updated = true;
             return updated;
@@ -1955,7 +1984,7 @@
             if (isOrderDetailPage && !isCurrentOrder(key, order)) continue;
             const numericMatch = key.match(/\d+/);
             const gid = order.gid || (numericMatch ? `gid://shopify/Order/${numericMatch[0]}` : null);
-            const isFullyVerified = (order.detailFetched || order.verifiedNoDiscount) && !!order.paymentMethod;
+            const isFullyVerified = !!(order.detailFetched || order.verifiedNoDiscount);
             const attempts = order.syncAttempts || 0;
 
             if (gid && (forceKey === key || (!isFullyVerified && attempts < 3))) {
@@ -2675,7 +2704,7 @@
             forceSyncCurrentOrder(orderName);
         } else if (!detailPageForcedRefresh) {
             detailPageForcedRefresh = true;
-            const isFullyVerified = (order.detailFetched || order.verifiedNoDiscount) && !!order.paymentMethod;
+            const isFullyVerified = !!(order.detailFetched || order.verifiedNoDiscount);
             if (!isFullyVerified) {
                 forceSyncCurrentOrder(orderName);
             }
@@ -2798,7 +2827,7 @@
             userStoppedSync = false;
             isSyncCancelled = false;
             updateDashboard(true);
-            loadAllOrders();
+            loadAllOrders(false, true);
             logAnalytics('🧹 Todos los detalles (cupones, productos, notas, pago) borrados. Re-sincronizando...');
         };
 
@@ -2863,7 +2892,7 @@
         const isNewestInCache = newestDomOrderId && ordersMap[newestDomOrderId];
         const pagBtn = getPaginationButton();
 
-        const pendingDetailCount = Object.values(ordersMap).filter(o => !(o.detailFetched || o.verifiedNoDiscount) || !o.paymentMethod).length;
+        const pendingDetailCount = Object.values(ordersMap).filter(o => !(o.detailFetched || o.verifiedNoDiscount)).length;
 
         let statusLabel = `${SVG_ICONS.check} Sincronizado`;
         let statusBgColor = '#2e7d32'; // verde
@@ -2927,8 +2956,20 @@
             applyDOMDateFilter(filteredIds);
         }
         if (!isOrderDetailPage && getPaginationButton() && !isAutoLoadingAll && !userStoppedSync) {
-            loadAllOrders();
-            return;
+            const articles = document.querySelectorAll('article');
+            let hasAnyCachedVisible = false;
+            const cachedOrders = getStoredOrders();
+            for (const article of articles) {
+                const orderId = extractOrderIdFromArticle(article);
+                if (orderId && cachedOrders[orderId]) {
+                    hasAnyCachedVisible = true;
+                    break;
+                }
+            }
+            if (!hasAnyCachedVisible || Object.keys(cachedOrders).length === 0) {
+                loadAllOrders();
+                return;
+            }
         }
         syncMissingOrderDetails();
     }
@@ -2971,7 +3012,19 @@
             const startAutoLoad = () => {
                 const pagBtn = getPaginationButton();
                 if (pagBtn || hasMorePagesDetected) {
-                    loadAllOrders();
+                    const articles = document.querySelectorAll('article');
+                    let hasAnyCachedVisible = false;
+                    const cachedOrders = getStoredOrders();
+                    for (const article of articles) {
+                        const orderId = extractOrderIdFromArticle(article);
+                        if (orderId && cachedOrders[orderId]) {
+                            hasAnyCachedVisible = true;
+                            break;
+                        }
+                    }
+                    if (!hasAnyCachedVisible || Object.keys(cachedOrders).length === 0) {
+                        loadAllOrders();
+                    }
                     return true;
                 }
                 return false;
